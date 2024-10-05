@@ -24,7 +24,10 @@ def create_sample_tensor():
     #                    TODO: Implement this function                          #
     #############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    x = torch.zeros((3, 2))
+    x[0, 1] = 10
+    x[1, 0] = 100
     #############################################################################
     #                            END OF YOUR CODE                               #
     #############################################################################
@@ -55,10 +58,13 @@ def mutate_tensor(x, indices, values):
   - The input tensor x
   """
     #############################################################################
-    #                    TODO: Implement this function                          #
+    #                   : Implement this function                          #
     #############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    for i in range(len(indices)):
+        print(indices[i])
+        x[indices[i]] = values[i]
     #############################################################################
     #                            END OF YOUR CODE                               #
     #############################################################################
@@ -83,11 +89,15 @@ def count_tensor_elements(x):
   """
     num_elements = None
     #############################################################################
-    #                    TODO: Implement this function                          #
+    #                    : Implement this function                          #
     #   You CANNOT use the built-in functions torch.numel(x) or x.numel().      #
     #############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    shape = x.shape
+    num_elements = 1
+    for i in range(len(shape)):
+        num_elements *= shape[i]
     #############################################################################
     #                            END OF YOUR CODE                               #
     #############################################################################
