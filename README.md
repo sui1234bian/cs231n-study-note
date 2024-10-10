@@ -1,5 +1,5 @@
 # cs231n-study-note
-博主目前博0，在入坑cv，欢迎提pr交流
+博主目前博0，在入坑cv，欢迎提pr或者issue交流
 
 课程b站链接：https://www.bilibili.com/video/BV1TQ4y1B7yx?p=5&vd_source=4b2cbbf9e5d436349a82c1ab5d4ea008
 
