@@ -21,7 +21,7 @@ def create_sample_tensor():
   """
     x = None
     #############################################################################
-    #                    TODO: Implement this function                          #
+    #                     Implement this function                          #
     #############################################################################
     # Replace "pass" statement with your code
     # pass
@@ -116,10 +116,11 @@ def create_tensor_of_pi(M, N):
   """
     x = None
     #############################################################################
-    #       TODO: Implement this function. It should take one line.             #
+    #      Implement this function. It should take one line.             #
     #############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    x = torch.full((M, N), 3.14)
     #############################################################################
     #                            END OF YOUR CODE                               #
     #############################################################################
@@ -141,10 +142,15 @@ def multiples_of_ten(start, stop):
     assert start <= stop
     x = None
     #############################################################################
-    #                    TODO: Implement this function                          #
+    #                    : Implement this function                          #
     #############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    start_i = start + (start % 10)
+    if start_i > stop:
+        x = torch.empty(0).to(torch.float64)
+    else:
+        x = torch.arange(start_i, stop+1, 10).to(torch.float64)
     #############################################################################
     #                            END OF YOUR CODE                               #
     #############################################################################
@@ -179,10 +185,13 @@ def slice_indexing_practice(x):
     first_two_rows_three_cols = None
     even_rows_odd_cols = None
     #############################################################################
-    #                    TODO: Implement this function                          #
+    #                   Implement this function                          #
     #############################################################################
     # Replace "pass" statement with your code
-    pass
+    last_row = x[-1,:]
+    third_col = x[:, 2:3]
+    first_two_rows_three_cols = x[:2, :3]
+    even_rows_odd_cols = x[::2, 1::2]
     #############################################################################
     #                            END OF YOUR CODE                               #
     #############################################################################
@@ -219,10 +228,14 @@ def slice_assignment_practice(x):
   Returns: x
   """
     #############################################################################
-    #                    TODO: Implement this function                          #
+    #                     Implement this function                          #
     #############################################################################
     # Replace "pass" statement with your code
-    pass
+    x[:2, 1] = 1
+    x[:2, 2:6] = 2
+    x[2:4,:3:2] = 3
+    x[2:4,1:4:2] = 4
+    x[2:4,4:6] = 5
     #############################################################################
     #                            END OF YOUR CODE                               #
     #############################################################################
