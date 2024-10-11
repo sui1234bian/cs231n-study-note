@@ -480,10 +480,24 @@ def batched_matrix_multiply(x, y, use_loop=True):
   """
     z = None
     #############################################################################
-    #                    TODO: Implement this function                          #
+    #                    Implement this function                          #
     #############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    if use_loop:
+        # 之前我自己写的：
+        # z = torch.zeros((x.shape[0], x.shape[1], y.shape[2]))
+        # for i in range(x.shape[0]):
+        #     z[i, :, :] = torch.matmul(x[i, :, :], y[i, :, :])
+        z_list = []
+        for i in range(x.shape[0]):
+            z_list.append(torch.matmul(x[i], y[i]))
+        z = torch.stack(z_list)
+        '''torch.stack 用于将多个张量沿着新维度进行堆叠，生成一个新的张量。
+        它和 torch.cat 类似，但 torch.cat 是在现有维度上进行拼接，而 torch.stack 会增加一个新的维度。'''
+    else:
+        z = torch.bmm(x, y)
+        '''torch.bmm 用于执行批量矩阵乘法，适用于三维张量的批量矩阵乘法操作。具体来说，它会对张量的前一维度进行批处理，每一批次执行二维矩阵乘法。'''
     #############################################################################
     #                            END OF YOUR CODE                               #
     #############################################################################
