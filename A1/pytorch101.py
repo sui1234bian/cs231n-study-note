@@ -444,10 +444,13 @@ def zero_row_min(x):
   """
     y = None
     #############################################################################
-    #                    TODO: Implement this function                          #
+    #                    Implement this function                          #
     #############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    row_min_idx = torch.argmin(x, dim=1)
+    y = x.clone()
+    y[torch.arange(0, y.shape[0], 1), row_min_idx] = 0
     #############################################################################
     #                            END OF YOUR CODE                               #
     #############################################################################
