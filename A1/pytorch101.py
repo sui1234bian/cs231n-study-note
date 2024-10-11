@@ -529,10 +529,13 @@ def normalize_columns(x):
   """
     y = None
     #############################################################################
-    #                    TODO: Implement this function                          #
+    #                    Implement this function                          #
     #############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    mu_j = x.sum(dim=0) / x.shape[0]
+    sigma_j = torch.sqrt((1/(x.shape[0] - 1)) * torch.sum((x - mu_j) ** 2, dim=0))
+    y = (x-mu_j) / sigma_j
     #############################################################################
     #                            END OF YOUR CODE                               #
     #############################################################################
