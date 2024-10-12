@@ -393,7 +393,7 @@ def test_one_param_set(cls, data_dict, lr, reg, num_iters=2000):
   train_acc = 0.0 # The accuracy is simply the fraction of data points
   val_acc = 0.0   # that are correctly classified.
   ###########################################################################
-  # TODO:                                                                   #
+  #                                                                    #
   # Write code that, train a linear SVM on the training set, compute its    #
   # accuracy on the training and validation sets                            #
   #                                                                         #
@@ -404,6 +404,8 @@ def test_one_param_set(cls, data_dict, lr, reg, num_iters=2000):
   # Feel free to uncomment this, at the very beginning,
   # and don't forget to remove this line before submitting your final version
   # num_iters = 100
+  # if num_iters == 100:
+  #   print(f"num_iters == 100")
 
   # Replace "pass" statement with your code
   # pass
@@ -451,14 +453,29 @@ def softmax_loss_naive(W, X, y, reg):
   dW = torch.zeros_like(W)
 
   #############################################################################
-  # TODO: Compute the softmax loss and its gradient using explicit loops.     #
+  # Compute the softmax loss and its gradient using explicit loops.     #
   # Store the loss in loss and the gradient in dW. If you are not careful     #
   # here, it is easy to run into numeric instability (Check Numeric Stability #
   # in http://cs231n.github.io/linear-classify/). Plus, don't forget the      #
   # regularization!                                                           #
   #############################################################################
   # Replace "pass" statement with your code
-  pass
+  # pass
+  for i in range(X.shape[0]):
+    scores = W.t().mv(X[i]) # (1, D) * (D, C) -> (1, C)
+    scores -= torch.max(scores) # 防止指数函数溢出
+    scores = torch.exp(scores)
+    scores /= torch.sum(scores) # (1, C)
+    loss += -torch.log(scores[y[i]]) # / X.shape[0]
+    for j in range(W.shape[1]):
+      if j == y[i]:
+        dW[:, j] -= (1-scores[j]) * X[i]
+      else:
+        dW[:, j] += scores[j] * X[i] 
+  loss /= X.shape[0]
+  loss += reg * torch.sum(W * W)
+  dW /= X.shape[0]
+  dW += 2 * reg * W
   #############################################################################
   #                          END OF YOUR CODE                                 #
   #############################################################################
@@ -479,14 +496,26 @@ def softmax_loss_vectorized(W, X, y, reg):
   dW = torch.zeros_like(W)
 
   #############################################################################
-  # TODO: Compute the softmax loss and its gradient using no explicit loops.  #
+  # Compute the softmax loss and its gradient using no explicit loops.  #
   # Store the loss in loss and the gradient in dW. If you are not careful     #
   # here, it is easy to run into numeric instability (Check Numeric Stability #
   # in http://cs231n.github.io/linear-classify/). Don't forget the            #
   # regularization!                                                           #
   #############################################################################
   # Replace "pass" statement with your code
-  pass
+  # pass
+  scores = torch.mm(X, W) # (N, D) * (D, C) -> (N, C)
+  scores -= torch.max(scores, dim=1)[0].view(-1, 1) # 防止指数函数溢出
+  # print(torch.max(scores, dim=1)[0].shape)
+  scores = torch.exp(scores)
+  scores /= torch.sum(scores, dim=1).view(-1, 1) # (N, C)
+  loss = torch.sum(-torch.log(scores[torch.arange(0, X.shape[0], 1), y]))
+  scores[torch.arange(0, X.shape[0], 1), y] -= 1
+  dW = torch.mm(X.t(), scores)
+  loss /= X.shape[0]
+  loss += reg * torch.sum(W * W)
+  dW /= X.shape[0]
+  dW += 2 * reg * W # (D, C)
   #############################################################################
   #                          END OF YOUR CODE                                 #
   #############################################################################
@@ -515,7 +544,10 @@ def softmax_get_search_params():
   # classifier.                                                             #
   ###########################################################################
   # Replace "pass" statement with your code
-  pass
+  # pass
+  learning_rates = [4e-2, 3e-3, 3e-2, 2e-3, 1e-3, 8e-3, 9e-4, 7e-3, 8e-4, 5e-3, 0.02, 0.01]  # 学习率候选值
+  # learning_rates = [4e-2, 3e-3]
+  regularization_strengths = [0.1, 1, 2.5, 2, 1.5, 0.3, 0.5, 0.7, 1.2, 0.01, 0.03, 0.05, 0.08]  # 正则化强度候选值
   ###########################################################################
   #                           END OF YOUR CODE                              #
   ###########################################################################
