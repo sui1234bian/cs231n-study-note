@@ -387,7 +387,7 @@ def knn_get_best_k(k_to_accuracies):
 	"""
 	best_k = 0
 	##############################################################################
-	# TODO: Use the results of cross-validation stored in k_to_accuracies to     #
+	# Use the results of cross-validation stored in k_to_accuracies to     #
 	# choose the value of k, and store the result in best_k. You should choose   #
 	# the value of k that has the highest mean accuracy accross all folds.       #
 	##############################################################################
