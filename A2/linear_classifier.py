@@ -110,7 +110,7 @@ def svm_loss_naive(W, X, y, reg):
   num_train = X.shape[0]
   loss = 0.0
   for i in range(num_train):
-    scores = W.t().mv(X[i])
+    scores = W.t().mv(X[i])  # (D*C) * (D) -> (C)
     correct_class_score = scores[y[i]]
     for j in range(num_classes):
       if j == y[i]:
@@ -126,7 +126,9 @@ def svm_loss_naive(W, X, y, reg):
         # that the loss is being computed.                                    #
         #######################################################################
         # Replace "pass" statement with your code
-        pass
+        # pass
+
+
         #######################################################################
         #                       END OF YOUR CODE                              #
         #######################################################################
