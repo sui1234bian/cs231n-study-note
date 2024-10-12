@@ -110,7 +110,7 @@ def svm_loss_naive(W, X, y, reg):
   num_train = X.shape[0]
   loss = 0.0
   for i in range(num_train):
-    scores = W.t().mv(X[i])  # (D*C) * (D) -> (C)
+    scores = W.t().mv(X[i])  # (D*C) * (D) -> (C*D) * (D) ->(C)
     correct_class_score = scores[y[i]]
     for j in range(num_classes):
       if j == y[i]:
@@ -119,16 +119,18 @@ def svm_loss_naive(W, X, y, reg):
       if margin > 0:
         loss += margin
         #######################################################################
-        # TODO:                                                               #
+        #                                                                #
         # Compute the gradient of the loss function and store it dW. (part 1) #
         # Rather than first computing the loss and then computing the         #
         # derivative, it is simple to compute the derivative at the same time #
         # that the loss is being computed.                                    #
         #######################################################################
         # Replace "pass" statement with your code
-        # pass
-
-
+        # 错误的分类增加梯度 
+        # 注意要除以总共的训练样本数
+        dW[:, j] += X[i] / num_train  # dW:(D, C), X[i]:(D)
+        # 应该正确的分类减少梯度
+        dW[:, y[i]] -= X[i] / num_train
         #######################################################################
         #                       END OF YOUR CODE                              #
         #######################################################################
@@ -142,11 +144,11 @@ def svm_loss_naive(W, X, y, reg):
   loss += reg * torch.sum(W * W)
 
   #############################################################################
-  # TODO:                                                                     #
+  #                                                                     #
   # Compute the gradient of the loss function and store it in dW. (part 2)    #
   #############################################################################
   # Replace "pass" statement with your code
-  pass
+  dW += 2 * reg * W
   #############################################################################
   #                             END OF YOUR CODE                              #
   #############################################################################
@@ -172,21 +174,30 @@ def svm_loss_vectorized(W, X, y, reg):
   - gradient of loss with respect to weights W; a tensor of same shape as W
   """
   loss = 0.0
-  dW = torch.zeros_like(W) # initialize the gradient as zero
+  dW = torch.zeros_like(W) # initialize the gradient as zero (D, C)
 
   #############################################################################
-  # TODO:                                                                     #
+  #                                                                      #
   # Implement a vectorized version of the structured SVM loss, storing the    #
   # result in loss.                                                           #
   #############################################################################
   # Replace "pass" statement with your code
-  pass
+  # pass
+  scores = torch.mm(X, W) # (N, D) * (D, C) -> (N, C)
+  correct_class_score = scores[torch.arange(0, X.shape[0], 1), y].view(-1, 1) # (N,)
+  margin = scores - correct_class_score + 1 # 计算loss
+  margin[torch.arange(0, X.shape[0], 1), y] = 0 # 不算自己类别的损失
+  margin = torch.clamp(margin, min=0) # (N, C) 将小于0的设置为0
+  loss = torch.sum(margin) # loss求和 
+  # loss -= torch.sum(margin[torch.arange(0, X.shape[0], 1), y]) # 减掉自己类别那部分
+  loss /= X.shape[0]
+  loss += reg * torch.sum(W * W)
   #############################################################################
   #                             END OF YOUR CODE                              #
   #############################################################################
 
   #############################################################################
-  # TODO:                                                                     #
+  #                                                                  #
   # Implement a vectorized version of the gradient for the structured SVM     #
   # loss, storing the result in dW.                                           #
   #                                                                           #
@@ -195,7 +206,14 @@ def svm_loss_vectorized(W, X, y, reg):
   # loss.                                                                     #
   #############################################################################
   # Replace "pass" statement with your code
-  pass
+  # pass
+  # 找出大于0的部分 
+  margin_mask = (margin > 0).to(X.dtype) # (N, C)
+  margin_count = torch.sum(margin_mask, dim=1) # (N,) 计算dw要减几次自己 
+  margin_mask[torch.arange(0, X.shape[0], 1), y] -= margin_count # 现在矩阵里面是1, 0 和-几，最多不超过-C
+  dW = torch.mm(X.t(), margin_mask) # (D, N) * (N, C) -> (D, C)
+  dW /= X.shape[0]
+  dW += 2 * reg * W
   #############################################################################
   #                             END OF YOUR CODE                              #
   #############################################################################
@@ -211,14 +229,17 @@ def sample_batch(X, y, num_train, batch_size):
   X_batch = None
   y_batch = None
   #########################################################################
-  # TODO: Store the data in X_batch and their corresponding labels in     #
+  # Store the data in X_batch and their corresponding labels in     #
   # y_batch; after sampling, X_batch should have shape (batch_size, dim)  #
   # and y_batch should have shape (batch_size,)                           #
   #                                                                       #
   # Hint: Use torch.randint to generate indices.                          #
   #########################################################################
   # Replace "pass" statement with your code
-  pass
+  # pass
+  idx = torch.randint(0, num_train, (batch_size,))
+  X_batch = X[idx, :]
+  y_batch = y[idx]
   #########################################################################
   #                       END OF YOUR CODE                                #
   #########################################################################
@@ -263,7 +284,7 @@ def train_linear_classifier(loss_func, W, X, y, learning_rate=1e-3,
   # Run stochastic gradient descent to optimize W
   loss_history = []
   for it in range(num_iters):
-    # TODO: implement sample_batch function
+    # implement sample_batch function
     X_batch, y_batch = sample_batch(X, y, num_train, batch_size)
 
     # evaluate loss and gradient
@@ -272,11 +293,11 @@ def train_linear_classifier(loss_func, W, X, y, learning_rate=1e-3,
 
     # perform parameter update
     #########################################################################
-    # TODO:                                                                 #
+    #                                                                  #
     # Update the weights using the gradient and the learning rate.          #
     #########################################################################
     # Replace "pass" statement with your code
-    pass
+    W -= learning_rate * grad
     #########################################################################
     #                       END OF YOUR CODE                                #
     #########################################################################
@@ -303,11 +324,13 @@ def predict_linear_classifier(W, X):
   """
   y_pred = torch.zeros(X.shape[0], dtype=torch.int64)
   ###########################################################################
-  # TODO:                                                                   #
+  #                                                                   #
   # Implement this method. Store the predicted labels in y_pred.            #
   ###########################################################################
   # Replace "pass" statement with your code
-  pass
+  # pass
+  scores = torch.mm(X, W)
+  y_pred = torch.argmax(scores, dim=1)
   ###########################################################################
   #                           END OF YOUR CODE                              #
   ###########################################################################
@@ -330,10 +353,14 @@ def svm_get_search_params():
   regularization_strengths = []
 
   ###########################################################################
-  # TODO:   add your own hyper parameter lists.                             #
+  #    add your own hyper parameter lists.                             #
   ###########################################################################
   # Replace "pass" statement with your code
-  pass
+  # pass
+  # learning_rates = [4e-2, 3e-3, 3e-2, 2e-3, 1e-3, 8e-3, 9e-4, 7e-3, 8e-4, 5e-3, 0.02, 0.01]  # 学习率候选值
+  learning_rates = [4e-2, 3e-3]
+  # regularization_strengths = [0.1, 1, 2.5, 2, 1.5, 0.3, 0.5, 0.7, 1.2, 0.01, 0.03, 0.05, 0.08]  # 正则化强度候选值
+  regularization_strengths = [1e-1, 1e-2, 3e-2]
   ###########################################################################
   #                           END OF YOUR CODE                              #
   ###########################################################################
@@ -379,7 +406,14 @@ def test_one_param_set(cls, data_dict, lr, reg, num_iters=2000):
   # num_iters = 100
 
   # Replace "pass" statement with your code
-  pass
+  # pass
+  model = cls
+  model.train(data_dict['X_train'], data_dict['y_train'], learning_rate=lr, reg=reg, num_iters=num_iters,
+            batch_size=200, verbose=False)
+  y_train_pred = model.predict(data_dict['X_train'])
+  y_val_pred = model.predict(data_dict['X_val'])
+  train_acc = 100.0 * (data_dict['y_train'] == y_train_pred).double().mean().item()
+  val_acc = 100.0 * (data_dict['y_val'] == y_val_pred).double().mean().item()
   ############################################################################
   #                            END OF YOUR CODE                              #
   ############################################################################
