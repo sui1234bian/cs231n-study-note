@@ -111,12 +111,14 @@ def nn_forward_pass(params, X):
     hidden = None
     scores = None
     ############################################################################
-    # TODO: Perform the forward pass, computing the class scores for the input.#
+    # Perform the forward pass, computing the class scores for the input.#
     # Store the result in the scores variable, which should be an tensor of    #
     # shape (N, C).                                                            #
     ############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    hidden = torch.clamp(torch.mm(X, W1) + b1, min=0) # (N, D) * (D, H) -> (N, H)
+    scores = torch.mm(hidden, W2) + b2 # (N, H) * (H, C) -> (N, C)
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -167,7 +169,7 @@ def nn_forward_backward(params, X, y=None, reg=0.0):
     # Compute the loss
     loss = None
     ############################################################################
-    # TODO: Compute the loss, based on the results from nn_forward_pass.       #
+    # Compute the loss, based on the results from nn_forward_pass.       #
     # This should include both the data loss and L2 regularization for W1 and  #
     # W2. Store the result in the variable loss, which should be a scalar. Use #
     # the Softmax classifier loss. When you implment the regularization over W,#
@@ -176,7 +178,13 @@ def nn_forward_backward(params, X, y=None, reg=0.0):
     # (Check Numeric Stability in http://cs231n.github.io/linear-classify/).   #
     ############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    scores -= torch.max(scores, dim=1)[0].view(-1, 1)
+    scores = torch.exp(scores)
+    scores /= torch.sum(scores, dim=1).view(-1, 1)
+    loss = torch.sum(-torch.log(scores[torch.arange(0, X.shape[0], 1), y]))
+    loss /= X.shape[0]
+    loss += reg * (torch.sum(W1 * W1) + torch.sum(W2 * W2))
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -184,13 +192,26 @@ def nn_forward_backward(params, X, y=None, reg=0.0):
     # Backward pass: compute gradients
     grads = {}
     ###########################################################################
-    # TODO: Compute the backward pass, computing the derivatives of the       #
+    # Compute the backward pass, computing the derivatives of the       #
     # weights and biases. Store the results in the grads dictionary.          #
     # For example, grads['W1'] should store the gradient on W1, and be a      #
     # tensor of same size                                                     #
     ###########################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    # 最后一步处理
+    dscores = scores.clone()
+    dscores[torch.arange(0, X.shape[0], 1), y] -= 1 # 选中的那项
+    dscores /= X.shape[0]
+    # 第二层梯度
+    grads['W2'] = torch.mm(h1.t(), dscores) + 2 * reg * W2 # (D, N) * (N, C) -> (D, C)
+    grads['b2'] = torch.sum(dscores, dim=0)
+    # 隐藏层梯度
+    dh1 = torch.mm(dscores, W2.t())
+    dh1[h1 <= 0] = 0
+    # 第一层梯度
+    grads['W1'] = torch.mm(X.t(), dh1) + 2 * reg * W1
+    grads['b1'] = torch.sum(dh1, dim=0)
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -254,13 +275,15 @@ def nn_train(params, loss_func, pred_func, X, y, X_val, y_val,
     loss_history.append(loss.item())
 
     #########################################################################
-    # TODO: Use the gradients in the grads dictionary to update the         #
+    #  Use the gradients in the grads dictionary to update the         #
     # parameters of the network (stored in the dictionary self.params)      #
     # using stochastic gradient descent. You'll need to use the gradients   #
     # stored in the grads dictionary defined above.                         #
     #########################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    for param in params:
+      params[param] -= learning_rate * grads[param]
     #########################################################################
     #                             END OF YOUR CODE                          #
     #########################################################################
@@ -313,10 +336,12 @@ def nn_predict(params, loss_func, X):
   y_pred = None
 
   ###########################################################################
-  # TODO: Implement this function; it should be VERY simple!                #
+  # Implement this function; it should be VERY simple!                #
   ###########################################################################
   # Replace "pass" statement with your code
-  pass
+  # pass
+  scores = nn_forward_pass(params=params,X=X)[0]
+  y_pred = torch.argmax(scores, dim=1)
   ###########################################################################
   #                              END OF YOUR CODE                           #
   ###########################################################################
@@ -351,7 +376,11 @@ def nn_get_search_params():
   # classifier.                                                             #
   ###########################################################################
   # Replace "pass" statement with your code
-  pass
+  # pass
+  learning_rates = [1, 1.2, 1.5]
+  hidden_sizes = [2048]
+  regularization_strengths = [0, 1e-5, 1e-3]
+  learning_rate_decays = [0.95, 0.97, 0.99]
   ###########################################################################
   #                           END OF YOUR CODE                              #
   ###########################################################################
@@ -405,7 +434,28 @@ def find_best_net(data_dict, get_param_set_fn):
   # automatically like we did on the previous exercises.                      #
   #############################################################################
   # Replace "pass" statement with your code
-  pass
+  # pass
+  lrs, hs, rs, lrds = nn_get_search_params()
+  for lr in lrs:
+    for h in hs:
+      for r in rs:
+        for lrd in lrds:
+          net = TwoLayerNet(3 * 32 * 32, h, 10, device=data_dict['X_train'].device, dtype=data_dict['X_train'].dtype)
+          stats = net.train(data_dict['X_train'], data_dict['y_train'], data_dict['X_val'], data_dict['y_val'],
+                    num_iters=3000, batch_size=1000,
+                    learning_rate=lr, learning_rate_decay=lrd,
+                    reg=r, verbose=False)
+           # return {
+                #   'loss_history': loss_history,
+                #   'train_acc_history': train_acc_history,
+                #   'val_acc_history': val_acc_history,
+                # }
+          if max(stats['val_acc_history']) > best_val_acc:
+            best_val_acc = max(stats['val_acc_history'])
+            best_net = net
+            best_stat = stats
+            print(f"New best_val_acc: {best_val_acc} lr{lr} h{h} r{r} lrd{lrd}")
+          
   #############################################################################
   #                               END OF YOUR CODE                            #
   #############################################################################
