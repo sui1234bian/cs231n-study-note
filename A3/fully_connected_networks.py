@@ -206,10 +206,10 @@ class TwoLayerNet(object):
     ###########################################################################
     # Replace "pass" statement with your code
     # pass
-    self.params["W1"] = torch.randn((input_dim, hidden_dim)) * weight_scale
-    self.params["b1"] = torch.zeros((hidden_dim, 1))
-    self.params["W2"] = torch.randn((hidden_dim, num_classes)) * weight_scale
-    self.params["b2"] = torch.zeros((num_classes, 1))
+    self.params["W1"] = torch.randn((input_dim, hidden_dim), dtype=dtype) * weight_scale
+    self.params["b1"] = torch.zeros((hidden_dim,), dtype=dtype)
+    self.params["W2"] = torch.randn((hidden_dim, num_classes), dtype=dtype) * weight_scale
+    self.params["b2"] = torch.zeros((num_classes,), dtype=dtype)
     ###########################################################################
     #                            END OF YOUR CODE                             #
     ###########################################################################
@@ -253,12 +253,15 @@ class TwoLayerNet(object):
     """
     scores = None
     ###########################################################################
-    # TODO: Implement the forward pass for the two-layer net, computing the   #
+    # Implement the forward pass for the two-layer net, computing the   #
     # class scores for X and storing them in the scores variable.             #
     ###########################################################################
     # Replace "pass" statement with your code
     # pass
-    
+    # print(torch.mm(X.view(X.shape[0], -1), self.params["W1"]).shape, self.params["b1"].shape)
+    h1 = torch.mm(X.view(X.shape[0], -1).cuda(), self.params["W1"]) + self.params["b1"]
+    h1 = torch.clamp(h1, min=0)
+    scores = torch.mm(h1, self.params["W2"]) + self.params["b2"]
     ###########################################################################
     #                            END OF YOUR CODE                             #
     ###########################################################################
@@ -269,7 +272,7 @@ class TwoLayerNet(object):
 
     loss, grads = 0, {}
     ###########################################################################
-    # TODO: Implement the backward pass for the two-layer net. Store the loss #
+    # Implement the backward pass for the two-layer net. Store the loss #
     # in the loss variable and gradients in the grads dictionary. Compute data#
     # loss using softmax, and make sure that grads[k] holds the gradients for #
     # self.params[k]. Don't forget to add L2 regularization!                  #
@@ -279,7 +282,26 @@ class TwoLayerNet(object):
     # a factor of 0.5.                                                        #
     ###########################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    scores -= torch.max(scores, dim=1)[0].view(scores.shape[0], -1)
+    scores = torch.exp(scores)
+    scores /= torch.sum(scores, dim=1).view(scores.shape[0], -1)
+    loss = torch.sum(-torch.log(scores[torch.arange(0,scores.shape[0] ,1), y]))
+    loss /= scores.shape[0]
+    loss += self.reg * (torch.sum(self.params['W1'] * self.params['W1']) + torch.sum(self.params['W2'] * self.params['W2']))
+    dscores = scores.clone() # (N*C)
+    dscores[torch.arange(0, X.shape[0], 1), y] -= 1 # 选中的那项
+    dscores /= X.shape[0]
+    # 第二层梯度
+    grads['W2'] = torch.mm(h1.t(), dscores) + 2 * self.reg * self.params['W2'] # (D, N) * (N, C) -> (D, C)
+    grads['b2'] = torch.sum(dscores, dim=0)
+    # 隐藏层梯度
+    dh1 = torch.mm(dscores, self.params['W2'].t())
+    dh1[h1 <= 0] = 0
+    # 第一层梯度
+    grads['W1'] = torch.mm(X.t(), dh1) + 2 * self.reg * self.params['W1']
+    grads['b1'] = torch.sum(dh1, dim=0)
+    
     ###########################################################################
     #                            END OF YOUR CODE                             #
     ###########################################################################
@@ -330,14 +352,18 @@ class FullyConnectedNet(object):
     self.params = {}
 
     ############################################################################
-    # TODO: Initialize the parameters of the network, storing all values in    #
+    # Initialize the parameters of the network, storing all values in    #
     # the self.params dictionary. Store weights and biases for the first layer #
     # in W1 and b1; for the second layer use W2 and b2, etc. Weights should be #
     # initialized from a normal distribution centered at 0 with standard       #
     # deviation equal to weight_scale. Biases should be initialized to zero.   #
     ############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    self.params['W1'] = torch.rand((input_dim, hidden_dims)) * weight_scale
+    self.params['W2'] = torch.rand((hidden_dims, num_classes)) * weight_scale
+    self.params['b1'] = torch.zeros((hidden_dims, 1))
+    self.params['b2'] = torch.zeros((num_classes, 1))
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################
@@ -401,7 +427,10 @@ class FullyConnectedNet(object):
     # dropout forward pass.                                                    #
     ############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    h1 = torch.mm(X.view(X.shape[0], -1), self.params["W1"]) + self.params["b1"]
+    h1 = torch.clamp(h1, min=0)
+    scores = torch.mm(h1, self.params["W2"]) + self.params["b2"]
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################
@@ -421,7 +450,25 @@ class FullyConnectedNet(object):
     # of 0.5 to simplify the expression for the gradient.                      #
     ############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    scores -= torch.max(scores, dim=1)[0].view(scores.shape[0], -1)
+    scores = torch.exp(scores)
+    scores /= torch.sum(scores, dim=1).view(scores.shape[0], -1)
+    loss = torch.sum(-torch.log(scores[torch.arange(0,scores.shape[0] ,1), y]))
+    loss /= scores.shape[0]
+    loss += self.reg * (torch.sum(self.params['W1'] * self.params['W1']) + torch.sum(self.params['W2'] * self.params['W2']))
+    dscores = scores.clone() # (N*C)
+    dscores[torch.arange(0, X.shape[0], 1), y] -= 1 # 选中的那项
+    dscores /= X.shape[0]
+    # 第二层梯度
+    grads['W2'] = torch.mm(h1.t(), dscores) + 2 * self.reg * self.params['W2'] # (D, N) * (N, C) -> (D, C)
+    grads['b2'] = torch.sum(dscores, dim=0)
+    # 隐藏层梯度
+    dh1 = torch.mm(dscores, self.params['W2'].t())
+    dh1[h1 <= 0] = 0
+    # 第一层梯度
+    grads['W1'] = torch.mm(X.t(), dh1) + 2 * self.reg * self.params['W1']
+    grads['b1'] = torch.sum(dh1, dim=0)
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################
@@ -432,12 +479,12 @@ class FullyConnectedNet(object):
 def create_solver_instance(data_dict, dtype, device):
   model = TwoLayerNet(hidden_dim=200, dtype=dtype, device=device)
   ##############################################################################
-  # TODO: Use a Solver instance to train a TwoLayerNet that achieves at least  #
+  # Use a Solver instance to train a TwoLayerNet that achieves at least  #
   # 50% accuracy on the validation set.                                        #
   ##############################################################################
   solver = None
   # Replace "pass" statement with your code
-  pass
+  solver = Solver(model=model, data=data_dict, num_epochs=100, lr_decay=0.99)
   ##############################################################################
   #                             END OF YOUR CODE                               #
   ##############################################################################

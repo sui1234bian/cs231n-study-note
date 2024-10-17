@@ -240,8 +240,11 @@ class Solver(object):
             y_pred.append(torch.argmax(scores, dim=1))
 
         y_pred = torch.cat(y_pred)
-        acc = (y_pred == y).to(torch.float).mean()
-
+        ################################################
+        acc = (y_pred == y.cuda()).to(torch.float).mean()
+        # acc = (y_pred == y).to(torch.float).mean()
+        y.cpu()
+        ################################################
         return acc.item()
 
     def train(self, time_limit=None, return_best_params=True):
