@@ -35,11 +35,13 @@ class Linear(object):
     """
     out = None
     #############################################################################
-    # TODO: Implement the linear forward pass. Store the result in out. You     #
+    # Implement the linear forward pass. Store the result in out. You     #
     # will need to reshape the input into rows.                                 #
     #############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    x_ = x.view(x.shape[0], -1)
+    out = torch.mm(x_, w) + b
     #############################################################################
     #                              END OF YOUR CODE                             #
     #############################################################################
@@ -64,10 +66,14 @@ class Linear(object):
     x, w, b = cache
     dx, dw, db = None, None, None
     #############################################################################
-    # TODO: Implement the linear backward pass.                                 #
+    # Implement the linear backward pass.                                 #
     #############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    dx = torch.mm(dout, w.t())
+    dx = torch.reshape(dx, x.shape)
+    dw = torch.mm(dout.t(), x.view(x.shape[0], -1)).t()
+    db = torch.sum(dout, dim=0)
     #############################################################################
     #                              END OF YOUR CODE                             #
     #############################################################################
@@ -88,11 +94,12 @@ class ReLU(object):
     """
     out = None
     #############################################################################
-    # TODO: Implement the ReLU forward pass.                                    #
+    # Implement the ReLU forward pass.                                    #
     # You should not change the input tensor with an in-place operation.        #
     #############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    out = torch.clamp(x, min=0)
     #############################################################################
     #                              END OF YOUR CODE                             #
     #############################################################################
@@ -111,11 +118,14 @@ class ReLU(object):
     """
     dx, x = None, cache
     #############################################################################
-    # TODO: Implement the ReLU backward pass.                                   #
+    # Implement the ReLU backward pass.                                   #
     # You should not change the input tensor with an in-place operation.        #
     #############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    dx = dout.clone()
+    # dout是上游梯度，因为relu导数是1，所以本层梯度大于0的相当于上游梯度乘了1就是不变，但是要把本层梯度小于等于0的变为0
+    dx[x <= 0] = 0
     #############################################################################
     #                              END OF YOUR CODE                             #
     #############################################################################
@@ -186,7 +196,7 @@ class TwoLayerNet(object):
     self.reg = reg
 
     ###########################################################################
-    # TODO: Initialize the weights and biases of the two-layer net. Weights   #
+    # Initialize the weights and biases of the two-layer net. Weights   #
     # should be initialized from a Gaussian centered at 0.0 with              #
     # standard deviation equal to weight_scale, and biases should be          #
     # initialized to zero. All weights and biases should be stored in the     #
@@ -195,7 +205,11 @@ class TwoLayerNet(object):
     # weights and biases using the keys 'W2' and 'b2'.                        #
     ###########################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    self.params["W1"] = torch.randn((input_dim, hidden_dim)) * weight_scale
+    self.params["b1"] = torch.zeros((hidden_dim, 1))
+    self.params["W2"] = torch.randn((hidden_dim, num_classes)) * weight_scale
+    self.params["b2"] = torch.zeros((num_classes, 1))
     ###########################################################################
     #                            END OF YOUR CODE                             #
     ###########################################################################
@@ -243,7 +257,8 @@ class TwoLayerNet(object):
     # class scores for X and storing them in the scores variable.             #
     ###########################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    
     ###########################################################################
     #                            END OF YOUR CODE                             #
     ###########################################################################
