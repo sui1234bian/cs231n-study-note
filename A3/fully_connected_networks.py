@@ -360,10 +360,19 @@ class FullyConnectedNet(object):
     ############################################################################
     # Replace "pass" statement with your code
     # pass
-    self.params['W1'] = torch.rand((input_dim, hidden_dims)) * weight_scale
-    self.params['W2'] = torch.rand((hidden_dims, num_classes)) * weight_scale
-    self.params['b1'] = torch.zeros((hidden_dims, 1))
-    self.params['b2'] = torch.zeros((num_classes, 1))
+    # 一个雷，这里必须是randn，因为要正态分布
+    '''接下来用循环实现
+    self.params['W1'] = torch.randn((input_dim, hidden_dims[0]), device=device, dtype=dtype) * weight_scale
+    self.params['W2'] = torch.randn((hidden_dims[0], hidden_dims[1]), device=device, dtype=dtype) * weight_scale
+    self.params['W3'] = torch.randn((hidden_dims[1], num_classes), device=device, dtype=dtype) * weight_scale
+    self.params['b1'] = torch.zeros((hidden_dims[0],), device=device, dtype=dtype)
+    self.params['b2'] = torch.zeros((hidden_dims[1],), device=device, dtype=dtype)
+    self.params['b3'] = torch.zeros((num_classes,), device=device, dtype=dtype)
+    '''
+    dim_lst = [input_dim] + hidden_dims + [num_classes]
+    for i in range(len(hidden_dims)+1):
+      self.params[f'W{i+1}'] = torch.randn((dim_lst[i], dim_lst[i+1]), device=device, dtype=dtype) * weight_scale
+      self.params[f'b{i+1}'] = torch.zeros((dim_lst[i+1],), device=device, dtype=dtype)
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################
@@ -420,17 +429,38 @@ class FullyConnectedNet(object):
       self.dropout_param['mode'] = mode
     scores = None
     ############################################################################
-    # TODO: Implement the forward pass for the fully-connected net, computing  #
+    # Implement the forward pass for the fully-connected net, computing  #
     # the class scores for X and storing them in the scores variable.          #
     #                                                                          #
     # When using dropout, you'll need to pass self.dropout_param to each       #
     # dropout forward pass.                                                    #
     ############################################################################
     # Replace "pass" statement with your code
+    cache = {}
+    cache['h0'] = X.view(X.shape[0], -1)
+    for i in range(self.num_layers):
+      cache[f'h{i+1}'] = torch.mm(cache[f'h{i}'], self.params[f"W{i+1}"]) + self.params[f"b{i+1}"]
+      cache[f'h{i+1}'] = torch.clamp(cache[f'h{i+1}'], min=0)
+      if self.use_dropout:
+        pass
+    scores = cache[f'h{self.num_layers}']
+    scores -= torch.max(scores, dim=1)[0].view(scores.shape[0], -1)
+    scores = torch.exp(scores)
+    scores /= torch.sum(scores, dim=1).view(scores.shape[0], -1)
+    '''
     # pass
     h1 = torch.mm(X.view(X.shape[0], -1), self.params["W1"]) + self.params["b1"]
     h1 = torch.clamp(h1, min=0)
-    scores = torch.mm(h1, self.params["W2"]) + self.params["b2"]
+    # dropout
+    h2 = torch.mm(h1, self.params["W2"]) + self.params["b2"]
+    h2 = torch.clamp(h2, min=0)
+    # dropout
+    scores = torch.mm(h2, self.params["W3"]) + self.params["b3"]
+    scores -= torch.max(scores, dim=1)[0].view(scores.shape[0], -1)
+    scores = torch.exp(scores)
+    scores /= torch.sum(scores, dim=1).view(scores.shape[0], -1)
+    '''
+
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################
@@ -441,7 +471,7 @@ class FullyConnectedNet(object):
 
     loss, grads = 0.0, {}
     ############################################################################
-    # TODO: Implement the backward pass for the fully-connected net. Store the #
+    # Implement the backward pass for the fully-connected net. Store the #
     # loss in the loss variable and gradients in the grads dictionary. Compute #
     # data loss using softmax, and make sure that grads[k] holds the gradients #
     # for self.params[k]. Don't forget to add L2 regularization!               #
@@ -451,24 +481,41 @@ class FullyConnectedNet(object):
     ############################################################################
     # Replace "pass" statement with your code
     # pass
-    scores -= torch.max(scores, dim=1)[0].view(scores.shape[0], -1)
-    scores = torch.exp(scores)
-    scores /= torch.sum(scores, dim=1).view(scores.shape[0], -1)
     loss = torch.sum(-torch.log(scores[torch.arange(0,scores.shape[0] ,1), y]))
     loss /= scores.shape[0]
-    loss += self.reg * (torch.sum(self.params['W1'] * self.params['W1']) + torch.sum(self.params['W2'] * self.params['W2']))
+    for i in range(self.num_layers):
+      loss += self.reg * torch.sum(self.params[f'W{i+1}'] * self.params[f'W{i+1}'])
     dscores = scores.clone() # (N*C)
     dscores[torch.arange(0, X.shape[0], 1), y] -= 1 # 选中的那项
     dscores /= X.shape[0]
+    for i in range(self.num_layers, -1, -1):
+      grads[f'W{i}'] = 
+    '''
+    loss = torch.sum(-torch.log(scores[torch.arange(0,scores.shape[0] ,1), y]))
+    loss /= scores.shape[0]
+    loss += self.reg * (torch.sum(self.params['W1'] * self.params['W1']) + torch.sum(self.params['W2'] * self.params['W2'])
+                         + torch.sum(self.params['W3'] * self.params['W3']))
+    dscores = scores.clone() # (N*C)
+    dscores[torch.arange(0, X.shape[0], 1), y] -= 1 # 选中的那项
+    dscores /= X.shape[0]
+    '''
+    # '''
+    # 第三层梯度
+    grads['W3'] = torch.mm(cache['h2'].t(), dscores) + 2 * self.reg * self.params['W3'] # (D, N) * (N, C) -> (D, C)
+    grads['b3'] = torch.sum(dscores, dim=0)
+    # 第三层relu
+    dh2 = torch.mm(dscores, self.params['W3'].t())
+    dh2[cache['h2'] <= 0] = 0
     # 第二层梯度
-    grads['W2'] = torch.mm(h1.t(), dscores) + 2 * self.reg * self.params['W2'] # (D, N) * (N, C) -> (D, C)
-    grads['b2'] = torch.sum(dscores, dim=0)
-    # 隐藏层梯度
-    dh1 = torch.mm(dscores, self.params['W2'].t())
-    dh1[h1 <= 0] = 0
+    grads['W2'] = torch.mm(cache['h1'].t(), dh2) + 2 * self.reg * self.params['W2'] # (D, N) * (N, C) -> (D, C)
+    grads['b2'] = torch.sum(dh2, dim=0)
+    # 第二层relu
+    dh1 = torch.mm(dh2, self.params['W2'].t())
+    dh1[cache['h1'] <= 0] = 0
     # 第一层梯度
     grads['W1'] = torch.mm(X.t(), dh1) + 2 * self.reg * self.params['W1']
     grads['b1'] = torch.sum(dh1, dim=0)
+    # '''
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################
@@ -493,13 +540,17 @@ def create_solver_instance(data_dict, dtype, device):
 
 def get_three_layer_network_params():
   ############################################################################
-  # TODO: Change weight_scale and learning_rate so your model achieves 100%  #
+  # Change weight_scale and learning_rate so your model achieves 100%  #
   # training accuracy within 20 epochs.                                      #
   ############################################################################
-  weight_scale = 1e-2   # Experiment with this!
-  learning_rate = 1e-4  # Experiment with this!
+  # weight_scale = 1e-2   # Experiment with this!
+  # learning_rate = 1e-4  # Experiment with this!
   # Replace "pass" statement with your code
-  pass
+  # pass
+  # weight_scale = [1, 0.1, 0.01, 0.001]
+  # learning_rate = [1, 0.1, 0.01, 0.001]
+  weight_scale = 0.1   
+  learning_rate = 0.1  
   ############################################################################
   #                             END OF YOUR CODE                             #
   ############################################################################
