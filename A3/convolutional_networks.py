@@ -47,12 +47,25 @@ class Conv(object):
     """
     out = None
     ##############################################################################
-    # TODO: Implement the convolutional forward pass.                            #
+    # Implement the convolutional forward pass.                            #
     # Hint: you can use the function torch.nn.functional.pad for padding.        #
     # Note that you are NOT allowed to use anything in torch.nn in other places. #
     ##############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    # F.pad 的参数是以 (左，右，上，下, 前， 后) 的顺序指定的。这是为了在高度和宽度上分别指定填充。
+    x_pad = torch.nn.functional.pad(x, (conv_param['pad'], conv_param['pad'], conv_param['pad'], conv_param['pad']))
+    shape_new = (x.shape[0], w.shape[0], 
+                              int(1 + (x.shape[2] + 2 * conv_param['pad'] - w.shape[2]) / conv_param['stride']),
+                              int(1 + (x.shape[3] + 2 * conv_param['pad'] - w.shape[3]) / conv_param['stride']))
+    out = torch.zeros(shape_new, device=x.device, dtype=torch.float64)
+    for a in range(out.shape[0]):
+      for q in range(out.shape[1]):
+        for c in range(out.shape[2]):
+          for d in range(out.shape[3]):
+            x_slice = x_pad[a, :, c*conv_param['stride']: c*conv_param['stride'] + w.shape[2], 
+                            d*conv_param['stride']:d*conv_param['stride'] + w.shape[3]]
+            out[a, q, c, d] = torch.sum(x_slice * w[q]) + b[q]
     #############################################################################
     #                              END OF YOUR CODE                             #
     #############################################################################
@@ -78,7 +91,43 @@ class Conv(object):
     # TODO: Implement the convolutional backward pass.                          #
     #############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    x, w, b, conv_param = cache
+    N, C, H, W = x.shape
+    F, _, HH, WW = w.shape
+    stride = conv_param['stride']
+    pad = conv_param['pad']
+    
+    # Calculate output dimensions
+    H1 = 1 + (H + 2 * pad - HH) // stride
+    W1 = 1 + (W + 2 * pad - WW) // stride
+    
+    # Initialize gradients
+    db = torch.sum(dout, dim=(0, 2, 3))
+    dx = torch.zeros_like(x)
+    dw = torch.zeros_like(w)
+    
+    # Padding x
+    x_padded = torch.nn.functional.pad(x, (pad, pad, pad, pad))
+    dx_padded = torch.zeros_like(x_padded)
+    
+    # Compute gradients
+    for i in range(N):
+        for f in range(F):
+            for row in range(H1):
+                for col in range(W1):
+                    h_start = row * stride
+                    h_end = h_start + HH
+                    w_start = col * stride
+                    w_end = w_start + WW
+                    
+                    # Calculate dw and dx
+                    dw[f] += x_padded[i, :, h_start:h_end, w_start:w_end] * dout[i, f, row, col]
+                    dx_padded[i, :, h_start:h_end, w_start:w_end] += w[f] * dout[i, f, row, col]
+    
+    # Remove padding from dx
+    dx = dx_padded[:, :, pad:-pad, pad:-pad]
+
     #############################################################################
     #                              END OF YOUR CODE                             #
     #############################################################################
