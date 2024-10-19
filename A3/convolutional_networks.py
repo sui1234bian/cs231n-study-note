@@ -88,7 +88,7 @@ class Conv(object):
     """
     dx, dw, db = None, None, None
     #############################################################################
-    # TODO: Implement the convolutional backward pass.                          #
+    # Implement the convolutional backward pass.                          #
     #############################################################################
     # Replace "pass" statement with your code
     # pass
@@ -157,10 +157,22 @@ class MaxPool(object):
     """
     out = None
     #############################################################################
-    # TODO: Implement the max-pooling forward pass                              #
+    # Implement the max-pooling forward pass                              #
     #############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    pool_height = pool_param['pool_height']
+    pool_width = pool_param['pool_width']
+    stride = pool_param['stride']
+    out_shape = (x.shape[0], x.shape[1], 
+                 int(1 + (x.shape[2] - pool_height) / stride),
+                 int(1 + (x.shape[3] - pool_width) / stride))
+    out = torch.zeros(out_shape, device=x.device, dtype=x.dtype)
+    for a in range(out_shape[0]):
+      for b in range(out_shape[1]):
+        for c in range(out_shape[2]):
+          for d in range(out_shape[3]):
+            out[a, b, c, d] = torch.max(x[a, b, c*stride:c*stride + pool_height, d*stride:d*stride + pool_width])
     #############################################################################
     #                              END OF YOUR CODE                             #
     #############################################################################
@@ -179,10 +191,24 @@ class MaxPool(object):
     """
     dx = None
     #############################################################################
-    # TODO: Implement the max-pooling backward pass                             #
+    # Implement the max-pooling backward pass                             #
     #############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    x, pool_param = cache
+    pool_height = pool_param['pool_height']
+    pool_width = pool_param['pool_width']
+    stride = pool_param['stride']
+    dx = torch.zeros_like(x, dtype=torch.float64, device='cuda')
+    for a in range(dout.shape[0]):
+      for b in range(dout.shape[1]):
+        for c in range(dout.shape[2]):
+          for d in range(dout.shape[3]):
+            x_pool = x[a, b, c*stride:c*stride + pool_height, d*stride:d*stride + pool_width]
+            max_val = torch.max(x_pool)
+            mask = (x_pool == max_val)
+            dx[a, b, c*stride:c*stride + pool_height, d*stride:d*stride + pool_width] += mask * dout[a, b, c, d]
+
     #############################################################################
     #                              END OF YOUR CODE                             #
     #############################################################################
@@ -222,7 +248,7 @@ class ThreeLayerConvNet(object):
     self.dtype = dtype
 
     ############################################################################
-    # TODO: Initialize weights and biases for the three-layer convolutional    #
+    # Initialize weights and biases for the three-layer convolutional    #
     # network. Weights should be initialized from a Gaussian centered at 0.0   #
     # with standard deviation equal to weight_scale; biases should be          #
     # initialized to zero. All weights and biases should be stored in the      #
@@ -237,7 +263,21 @@ class ThreeLayerConvNet(object):
     # the start of the loss() function to see how that happens.                #               
     ############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    # for i in range(3):
+    #   self.params[f"W{i+1}"] = torch.randn((num_filters, input_dims[0], filter_size, filter_size) 
+    #                                        ,device=device, dtype=dtype) * weight_scale
+    #   self.params[f"b{i+1}"] = torch.zeros((num_filters,) ,device=device, dtype=dtype)
+    # input_dims=(3, 32, 32), num_filters=32, filter_size=7,
+    #     hidden_dim=100, num_classes=10
+    # conv - relu - 2x2 max pool - linear - relu - linear - softmax
+    self.params["W1"] = torch.randn((num_filters, input_dims[0], filter_size, filter_size) 
+                                           ,device=device, dtype=dtype) * weight_scale
+    self.params["b1"] = torch.zeros((num_filters,) ,device=device, dtype=dtype)
+    # (n, num_filters, 1 + ()/stride)
+    self.params["W2"] = 
+    self.params["b2"] = 
+
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################
@@ -288,7 +328,9 @@ class ThreeLayerConvNet(object):
     # Remember you can use the functions defined in your implementation above. #
     ############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    # from convolutional_networks import Conv_ReLU, Conv_ReLU_Pool
+    # conv - relu - 2x2 max pool - linear - relu - linear - softmax
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################
