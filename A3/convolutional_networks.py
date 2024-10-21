@@ -480,9 +480,10 @@ class DeepConvNet(object):
       self.params[f"b{i+1}"] = torch.zeros((num_filters[i],) ,device=device, dtype=dtype)
       now_dim = (num_filters[i], 1 + (now_dim[1] - conv_param['kernel_size'] + 2*conv_param['pad']) // conv_param['stride'], 
                   1 + (now_dim[2] - conv_param['kernel_size'] + 2*conv_param['pad']) // conv_param['stride'])
-      # if self.batchnorm:
-      #   pass
-      if i < len(self.max_pools):
+      if self.batchnorm:
+        self.params[f"ga{i+1}"] = torch.ones((num_filters[i],) ,device=device, dtype=dtype)
+        self.params[f"beta{i+1}"] = torch.zeros((num_filters[i],) ,device=device, dtype=dtype)
+      if i in self.max_pools:
         now_dim = (now_dim[0], 1 + (now_dim[1] - pool_param['pool_size']) // pool_param['stride'], 
                   1 + (now_dim[2] - pool_param['pool_size']) // pool_param['stride'])
     flatten_dim = now_dim[0] * now_dim[1] * now_dim[2]
@@ -599,13 +600,13 @@ class DeepConvNet(object):
     param_cache = {}
     cache['h0'] = X
     for i in range(self.num_layers-1):
-      if self.batchnorm and i < len(self.max_pools):
+      if self.batchnorm and (i in self.max_pools):
         cache[f'h{i+1}'], param_cache[f'h{i+1}']= Conv_BatchNorm_ReLU_Pool.forward(cache[f'h{i}'], self.params[f"W{i+1}"], self.params[f"b{i+1}"]
-                                                             ,self.gamma, self.beta, conv_param, bn_param, pool_param)
+                                                             ,self.params[f"ga{i+1}"], self.params[f"beta{i+1}"], conv_param, bn_param, pool_param)
       elif self.batchnorm:
         cache[f'h{i+1}'], param_cache[f'h{i+1}']= Conv_BatchNorm_ReLU.forward(cache[f'h{i}'], self.params[f"W{i+1}"], self.params[f"b{i+1}"]
-                                                             ,self.gamma, self.beta, conv_param, bn_param)
-      elif i < len(self.max_pools):
+                                                             ,self.params[f"ga{i+1}"], self.params[f"beta{i+1}"], conv_param, bn_param)
+      elif i in self.max_pools:
         cache[f'h{i+1}'], param_cache[f'h{i+1}']= Conv_ReLU_Pool.forward(cache[f'h{i}'], self.params[f"W{i+1}"], self.params[f"b{i+1}"]
                                                               ,conv_param, pool_param)
       else:
@@ -648,14 +649,14 @@ class DeepConvNet(object):
     dh = dscores @ self.params[f'W{self.num_layers}'].T
     dh = torch.reshape(dh, cache_shape)
     for i in range(self.num_layers-1, 0, -1):
-      if self.batchnorm and i <= len(self.max_pools):
-        dh, grads[f'W{i}'], grads[f'b{i}'], dgamma, dbeta = \
+      if self.batchnorm and (i in self.max_pools):
+        dh, grads[f'W{i}'], grads[f'b{i}'], grads[f'ga{i}'], grads[f'beta{i}'] = \
                     Conv_BatchNorm_ReLU_Pool.backward(dh, param_cache[f'h{i}'])
         grads[f'W{i}'] += 2 * self.reg * self.params[f'W{i}']
       elif self.batchnorm:
-        dh, grads[f'W{i}'], grads[f'b{i}'], dgamma, dbeta = Conv_BatchNorm_ReLU.backward(dh, param_cache[f'h{i}'])
+        dh, grads[f'W{i}'], grads[f'b{i}'], grads[f'ga{i}'], grads[f'beta{i}'] = Conv_BatchNorm_ReLU.backward(dh, param_cache[f'h{i}'])
         grads[f'W{i}'] += 2 * self.reg * self.params[f'W{i}']
-      elif i <= len(self.max_pools):
+      elif i in self.max_pools:
         dh, grads[f'W{i}'], grads[f'b{i}'] = Conv_ReLU_Pool.backward(dh, param_cache[f'h{i}'])
         grads[f'W{i}'] += 2 * self.reg * self.params[f'W{i}']
       else:
@@ -688,14 +689,14 @@ def create_convolutional_solver_instance(data_dict, dtype, device):
   model = None
   solver = None
   ################################################################################
-  # TODO: Train the best DeepConvNet that you can on CIFAR-10 within 60 seconds. #
+  # Train the best DeepConvNet that you can on CIFAR-10 within 60 seconds. #
   ################################################################################
   # Replace "pass" statement with your code
   # pass
   input_dims = data_dict['X_train'].shape[1:]
   model = DeepConvNet(input_dims=input_dims, num_classes=10,
                       num_filters=[32, 128, 1024],
-                      max_pools=[1,3,7],
+                      max_pools=[0,1,2],
                       weight_scale='kaiming',
                       reg=2e-5, 
                       batchnorm=False,
@@ -819,7 +820,7 @@ class BatchNorm(object):
     out, cache = None, None
     if mode == 'train':
       #######################################################################
-      # TODO: Implement the training-time forward pass for batch norm.      #
+      # Implement the training-time forward pass for batch norm.      #
       # Use minibatch statistics to compute the mean and variance, use      #
       # these statistics to normalize the incoming data, and scale and      #
       # shift the normalized data using gamma and beta.                     #
@@ -840,19 +841,33 @@ class BatchNorm(object):
       # might prove to be helpful.                                          #
       #######################################################################
       # Replace "pass" statement with your code
-      pass
+      # pass
+      sample_mean = torch.mean(x, dim=0)
+      sample_var = torch.var(x, dim=0, unbiased=False)
+      # 在 Batch Normalization 中，方差是基于整个 mini-batch 的数据计算的。
+      # 这里我们并不关心统计学中的无偏估计，而是想使用整个 batch 的方差来进行归一化。]
+      # 由于 batch normalization 的目的是对输入进行标准化，而不是估计总体分布，所以直接用 𝑁 而不是 𝑁−1 来计算更合适。
+      # unbiased=True 用于样本方差的无偏估计。
+      # unbiased=False 用于基于整个 batch 的方差计算，适合 batch normalization 的情景。
+      x_normalized = (x - sample_mean.reshape(1, x.shape[1])) / torch.sqrt(sample_var.reshape(1, x.shape[1]) + eps)
+      out = gamma * x_normalized + beta
+      cache = (x, gamma, beta, x_normalized, eps)
+      running_mean = momentum * running_mean + (1 - momentum) * sample_mean
+      running_var = momentum * running_var + (1 - momentum) * sample_var
       #######################################################################
       #                           END OF YOUR CODE                          #
       #######################################################################
     elif mode == 'test':
       #######################################################################
-      # TODO: Implement the test-time forward pass for batch normalization. #
+      # Implement the test-time forward pass for batch normalization. #
       # Use the running mean and variance to normalize the incoming data,   #
       # then scale and shift the normalized data using gamma and beta.      #
       # Store the result in the out variable.                               #
       #######################################################################
       # Replace "pass" statement with your code
-      pass
+      # pass
+      x_normalized = (x - running_mean.reshape(1, x.shape[1])) / torch.sqrt(running_var.reshape(1, x.shape[1]) + eps)
+      out = gamma * x_normalized + beta
       #######################################################################
       #                           END OF YOUR CODE                          #
       #######################################################################
@@ -885,14 +900,28 @@ class BatchNorm(object):
     """
     dx, dgamma, dbeta = None, None, None
     ###########################################################################
-    # TODO: Implement the backward pass for batch normalization. Store the    #
+    # Implement the backward pass for batch normalization. Store the    #
     # results in the dx, dgamma, and dbeta variables.                         #
     # Referencing the original paper (https://arxiv.org/abs/1502.03167)       #
     # might prove to be helpful.                                              #
     # Don't forget to implement train and test mode separately.               #
     ###########################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    # x, gamma, beta, x_normalized, eps = cache
+    x, gamma, beta, y, eps = cache
+    N = x.size(0)  # Batch size
+    dbeta = dout.sum(dim=0)
+    dgamma = torch.sum(dout * y, dim=0)
+    dy = dout * gamma  # (N, D)
+    mean = x.mean(dim=0)
+    var = x.var(dim=0, unbiased=False)
+    dx1 = dy / torch.sqrt(var + eps)  # (N, D)
+    dvar = torch.sum(dy * (x - mean) * (-0.5) * (var + eps) ** (-1.5), dim=0)  # (D,)
+    dmean = torch.sum(-dy / torch.sqrt(var + eps), dim=0)  # (D,)
+    dx2 = 2.0 / N * dvar * (x - mean)  # (N, D)
+    dx3 = dmean / N  # (D,)
+    dx = dx1 + dx2 + dx3  # (N, D)
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -915,7 +944,7 @@ class BatchNorm(object):
     """
     dx, dgamma, dbeta = None, None, None
     ###########################################################################
-    # TODO: Implement the backward pass for batch normalization. Store the    #
+    # Implement the backward pass for batch normalization. Store the    #
     # results in the dx, dgamma, and dbeta variables.                         #
     #                                                                         #
     # After computing the gradient with respect to the centered inputs, you   #
@@ -923,7 +952,22 @@ class BatchNorm(object):
     # single statement; our implementation fits on a single 80-character line.#
     ###########################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    N, D = dout.size()
+    x, gamma, beta, x_normalized, eps = cache
+    # Compute gradients for beta and gamma
+    dbeta = dout.sum(dim=0)
+    dgamma = (dout * x_normalized).sum(dim=0)
+    mean = torch.mean(x, dim=0)
+    var = torch.var(x, dim=0, unbiased=False)
+    std = torch.std(x, dim=0, unbiased=False)
+    # Backpropagation through the normalization step
+    dx_normalized = dout * gamma  # (N, D)
+    dvar = (dx_normalized * (x - mean) * -0.5 * (var + eps) ** -1.5).sum(dim=0)  # (D,)
+    dmean = (dx_normalized * -1 / std).sum(dim=0) + dvar * (-2 / N) * (x - mean).sum(dim=0)  # (D,)
+
+    # Gradient with respect to the input x
+    dx = (dx_normalized / std) + (dvar * 2 / N * (x - mean)) + (dmean / N)
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -959,14 +1003,18 @@ class SpatialBatchNorm(object):
     out, cache = None, None
 
     ###########################################################################
-    # TODO: Implement the forward pass for spatial batch normalization.       #
+    # Implement the forward pass for spatial batch normalization.       #
     #                                                                         #
     # HINT: You can implement spatial batch normalization by calling the      #
     # vanilla version of batch normalization you implemented above.           #
     # Your implementation should be very short; ours is less than five lines. #
     ###########################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    n, c, h, w = x.shape
+    x_ = torch.permute(x, (0, 2, 3, 1)).reshape((-1, c))
+    out, cache = BatchNorm.forward(x_, gamma, beta, bn_param)
+    out = out.reshape((n, h, w, c)).permute((0, 3, 1, 2))
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -988,14 +1036,18 @@ class SpatialBatchNorm(object):
     dx, dgamma, dbeta = None, None, None
 
     ###########################################################################
-    # TODO: Implement the backward pass for spatial batch normalization.      #
+    # Implement the backward pass for spatial batch normalization.      #
     #                                                                         #
     # HINT: You can implement spatial batch normalization by calling the      #
     # vanilla version of batch normalization you implemented above.           #
     # Your implementation should be very short; ours is less than five lines. #
     ###########################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    n, c, h, w = dout.shape
+    dout = dout.permute((0, 2, 3, 1)).reshape((-1, c))
+    dx, dgamma, dbeta = BatchNorm.backward_alt(dout, cache)
+    dx = dx.reshape((n, h, w, c)).permute((0, 3, 1, 2))
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
