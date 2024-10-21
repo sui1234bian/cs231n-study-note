@@ -599,13 +599,14 @@ class DeepConvNet(object):
     cache = {}
     param_cache = {}
     cache['h0'] = X
+    '''这里有个坑,self.bn_params[i]而不是bn_params,这样就能为每一层单独创建历史缓存,而不是都一样的running_mean,导致维度报错'''
     for i in range(self.num_layers-1):
       if self.batchnorm and (i in self.max_pools):
         cache[f'h{i+1}'], param_cache[f'h{i+1}']= Conv_BatchNorm_ReLU_Pool.forward(cache[f'h{i}'], self.params[f"W{i+1}"], self.params[f"b{i+1}"]
-                                                             ,self.params[f"ga{i+1}"], self.params[f"beta{i+1}"], conv_param, bn_param, pool_param)
+                                                             ,self.params[f"ga{i+1}"], self.params[f"beta{i+1}"], conv_param, self.bn_params[i], pool_param)
       elif self.batchnorm:
         cache[f'h{i+1}'], param_cache[f'h{i+1}']= Conv_BatchNorm_ReLU.forward(cache[f'h{i}'], self.params[f"W{i+1}"], self.params[f"b{i+1}"]
-                                                             ,self.params[f"ga{i+1}"], self.params[f"beta{i+1}"], conv_param, bn_param)
+                                                             ,self.params[f"ga{i+1}"], self.params[f"beta{i+1}"], conv_param, self.bn_params[i])
       elif i in self.max_pools:
         cache[f'h{i+1}'], param_cache[f'h{i+1}']= Conv_ReLU_Pool.forward(cache[f'h{i}'], self.params[f"W{i+1}"], self.params[f"b{i+1}"]
                                                               ,conv_param, pool_param)
@@ -649,14 +650,14 @@ class DeepConvNet(object):
     dh = dscores @ self.params[f'W{self.num_layers}'].T
     dh = torch.reshape(dh, cache_shape)
     for i in range(self.num_layers-1, 0, -1):
-      if self.batchnorm and (i in self.max_pools):
+      if self.batchnorm and ((i-1) in self.max_pools):
         dh, grads[f'W{i}'], grads[f'b{i}'], grads[f'ga{i}'], grads[f'beta{i}'] = \
                     Conv_BatchNorm_ReLU_Pool.backward(dh, param_cache[f'h{i}'])
         grads[f'W{i}'] += 2 * self.reg * self.params[f'W{i}']
       elif self.batchnorm:
         dh, grads[f'W{i}'], grads[f'b{i}'], grads[f'ga{i}'], grads[f'beta{i}'] = Conv_BatchNorm_ReLU.backward(dh, param_cache[f'h{i}'])
         grads[f'W{i}'] += 2 * self.reg * self.params[f'W{i}']
-      elif i in self.max_pools:
+      elif ((i-1) in self.max_pools):
         dh, grads[f'W{i}'], grads[f'b{i}'] = Conv_ReLU_Pool.backward(dh, param_cache[f'h{i}'])
         grads[f'W{i}'] += 2 * self.reg * self.params[f'W{i}']
       else:
@@ -842,6 +843,9 @@ class BatchNorm(object):
       #######################################################################
       # Replace "pass" statement with your code
       # pass
+      # if running_mean.shape != D:
+      #   running_mean = torch.zeros(D, dtype=x.dtype, device=x.device)
+      #   running_var = torch.zeros(D, dtype=x.dtype, device=x.device)
       sample_mean = torch.mean(x, dim=0)
       sample_var = torch.var(x, dim=0, unbiased=False)
       # 在 Batch Normalization 中，方差是基于整个 mini-batch 的数据计算的。
@@ -866,6 +870,7 @@ class BatchNorm(object):
       #######################################################################
       # Replace "pass" statement with your code
       # pass
+
       x_normalized = (x - running_mean.reshape(1, x.shape[1])) / torch.sqrt(running_var.reshape(1, x.shape[1]) + eps)
       out = gamma * x_normalized + beta
       #######################################################################
