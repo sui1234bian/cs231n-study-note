@@ -7,7 +7,7 @@
 
 作业链接：https://web.eecs.umich.edu/~justincj/teaching/eecs498/FA2020/schedule.html
 
-其中作业的A4还加上了的A5部分：https://web.eecs.umich.edu/~justincj/teaching/eecs498/WI2022/
+其中作业的A4、A5、A6都根据2022年作业进行了修改：https://web.eecs.umich.edu/~justincj/teaching/eecs498/WI2022/
 
 我的GPU：NVIDIA GeForce RTX 4080 Laptop GPU, 12GB
 
