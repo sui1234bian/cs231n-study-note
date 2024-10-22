@@ -11,8 +11,8 @@ import eecs598
 
 def _extract_tensors(dset, num=None, x_dtype=torch.float32):
     """
-    Extract the data and labels from a CIFAR10 dataset object and convert them to
-    tensors.
+    Extract the data and labels from a CIFAR10 dataset object
+    and convert them to tensors.
 
     Input:
     - dset: A torchvision.datasets.CIFAR10 object
@@ -23,12 +23,14 @@ def _extract_tensors(dset, num=None, x_dtype=torch.float32):
     - x: `x_dtype` tensor of shape (N, 3, 32, 32)
     - y: int64 tensor of shape (N,)
     """
-    x = torch.tensor(dset.data, dtype=x_dtype).permute(0, 3, 1, 2).div_(255)
+    x = torch.tensor(dset.data,
+                     dtype=x_dtype).permute(0, 3, 1, 2).div_(255)
     y = torch.tensor(dset.targets, dtype=torch.int64)
     if num is not None:
         if num <= 0 or num > x.shape[0]:
             raise ValueError(
-                "Invalid value num=%d; must be in the range [0, %d]" % (num, x.shape[0])
+                "Invalid value num=%d; must be in the range [0, %d]"
+                % (num, x.shape[0])
             )
         x = x[:num].clone()
         y = y[:num].clone()
@@ -53,14 +55,9 @@ def cifar10(num_train=None, num_test=None, x_dtype=torch.float32):
     - x_test: `x_dtype` tensor of shape (num_test, 3, 32, 32)
     - y_test: int64 tensor of shape (num_test, 3, 32, 32)
     """
-    ################################################################################
-    ## 修改这里的路径 ########
-    ################################################################################
-    download = not os.path.isdir('D:\debug\pythonProject\cs231n-study-note·1\A1\cifar-10-batches-py')
-    dset_train = CIFAR10(root='D:\debug\pythonProject\cs231n-study-note·1\A1', download=download, train=True)
-    dset_test = CIFAR10(root='D:\debug\pythonProject\cs231n-study-note·1\A1', train=False)
-    ################################################################################
-    ################################################################################
+    download = not os.path.isdir("cifar-10-batches-py")
+    dset_train = CIFAR10(root=".", download=download, train=True)
+    dset_test = CIFAR10(root=".", train=False)
     x_train, y_train = _extract_tensors(dset_train, num_train, x_dtype)
     x_test, y_test = _extract_tensors(dset_test, num_test, x_dtype)
 
@@ -76,34 +73,38 @@ def preprocess_cifar10(
     dtype=torch.float32,
 ):
     """
-    Returns a preprocessed version of the CIFAR10 dataset, automatically
-    downloading if necessary. We perform the following steps:
+    Returns a preprocessed version of the CIFAR10 dataset,
+    automatically downloading if necessary. We perform the following steps:
 
     (0) [Optional] Visualize some images from the dataset
     (1) Normalize the data by subtracting the mean
-    (2) Reshape each image of shape (3, 32, 32) into a vector of shape (3072,)
+    (2) Reshape each image of shape (3, 32, 32) into a vector
+        of shape (3072,)
     (3) [Optional] Bias trick: add an extra dimension of ones to the data
     (4) Carve out a validation set from the training set
 
     Inputs:
     - cuda: If true, move the entire dataset to the GPU
-    - validation_ratio: Float in the range (0, 1) giving the fraction of the train
-      set to reserve for validation
+    - validation_ratio: Float in the range (0, 1) giving the
+      fraction of the train set to reserve for validation
     - bias_trick: Boolean telling whether or not to apply the bias trick
-    - show_examples: Boolean telling whether or not to visualize data samples
+    - show_examples: Boolean telling whether or not to visualize
+      data samples
     - dtype: Optional, data type of the input image X
 
     Returns a dictionary with the following keys:
-    - 'X_train': `dtype` tensor of shape (N_train, D) giving training images
+    - 'X_train': `dtype` tensor of shape (N_train, D) giving
+      training images
     - 'X_val': `dtype` tensor of shape (N_val, D) giving val images
     - 'X_test': `dtype` tensor of shape (N_test, D) giving test images
     - 'y_train': int64 tensor of shape (N_train,) giving training labels
     - 'y_val': int64 tensor of shape (N_val,) giving val labels
     - 'y_test': int64 tensor of shape (N_test,) giving test labels
 
-    N_train, N_val, and N_test are the number of examples in the train, val, and
-    test sets respectively. The precise values of N_train and N_val are determined
-    by the input parameter validation_ratio. D is the dimension of the image data;
+    N_train, N_val, and N_test are the number of examples in the train,
+    val, and test sets respectively. The precise values of N_train and
+    N_val are determined by the input parameter validation_ratio. D is
+    the dimension of the image data;
     if bias_trick is False, then D = 32 * 32 * 3 = 3072;
     if bias_trick is True then D = 1 + 32 * 32 * 3 = 3073.
     """
@@ -151,8 +152,8 @@ def preprocess_cifar10(
 
     # 2. Reshape the image data into rows
     if flatten:
-      X_train = X_train.reshape(X_train.shape[0], -1)
-      X_test = X_test.reshape(X_test.shape[0], -1)
+        X_train = X_train.reshape(X_train.shape[0], -1)
+        X_test = X_test.reshape(X_test.shape[0], -1)
 
     # 3. Add bias dimension and transform into columns
     if bias_trick:
@@ -170,8 +171,8 @@ def preprocess_cifar10(
 
     # return the dataset
     data_dict = {}
-    data_dict["X_val"] = X_train[num_training : num_training + num_validation]
-    data_dict["y_val"] = y_train[num_training : num_training + num_validation]
+    data_dict["X_val"] = X_train[num_training:num_training + num_validation]
+    data_dict["y_val"] = y_train[num_training:num_training + num_validation]
     data_dict["X_train"] = X_train[0:num_training]
     data_dict["y_train"] = y_train[0:num_training]
 

@@ -41,8 +41,8 @@ class Solver(object):
             device='cuda')
     solver.train()
     A Solver works on a model object that must conform to the following API:
-    - model.params must be a dictionary mapping string parameter names to numpy
-      arrays containing parameter values.
+    - model.params must be a dictionary mapping string parameter names to torch
+      tensors containing parameter values.
     - model.loss(X, y) must be a function that computes training-time loss and
       gradients, and test-time classification scores, with the following inputs
       and outputs:
@@ -85,7 +85,8 @@ class Solver(object):
         - num_epochs: The number of epochs to run for during training.
         - print_every: Integer; training losses will be printed every
           print_every iterations.
-        - print_acc_every: We will print the accuracy every print_acc_every epochs.
+        - print_acc_every: We will print the accuracy every
+          print_acc_every epochs.
         - verbose: Boolean; if set to false then no output will be printed
           during training.
         - num_train_samples: Number of training samples used to check training
@@ -268,7 +269,8 @@ class Solver(object):
                             self.loss_history[-1],
                         )
                     )
-                    print("End of training; next iteration will exceed the time limit.")
+                    print("End of training; next iteration "
+                          "will exceed the time limit.")
                     break
             prev_time = cur_time
 
@@ -300,12 +302,14 @@ class Solver(object):
                 first_it = t == 0
                 last_it = t == num_iterations - 1
                 if first_it or last_it or epoch_end:
-                    train_acc = self.check_accuracy(
-                        self.X_train, self.y_train, num_samples=self.num_train_samples
-                    )
-                    val_acc = self.check_accuracy(
-                        self.X_val, self.y_val, num_samples=self.num_val_samples
-                    )
+                    train_acc = \
+                        self.check_accuracy(self.X_train,
+                                            self.y_train,
+                                            num_samples=self.num_train_samples)
+                    val_acc = \
+                        self.check_accuracy(self.X_val,
+                                            self.y_val,
+                                            num_samples=self.num_val_samples)
                     self.train_acc_history.append(train_acc)
                     self.val_acc_history.append(val_acc)
                     self._save_checkpoint()
@@ -325,4 +329,4 @@ class Solver(object):
 
         # At the end of training swap the best params into the model
         if return_best_params:
-          self.model.params = self.best_params
+            self.model.params = self.best_params
