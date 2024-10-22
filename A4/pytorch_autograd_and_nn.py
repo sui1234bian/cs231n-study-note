@@ -428,7 +428,25 @@ class ResidualBottleneckBlock(nn.Module):
     # Store the main block in self.block and the shortcut in self.shortcut.    #
     ############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    self.block = nn.Sequential(
+      nn.BatchNorm2d(Cin),
+      nn.ReLU(),
+      nn.Conv2d(Cin, Cout // 4, 1, 2 if downsample else 1, 0),
+      nn.BatchNorm2d(Cout // 4),
+      nn.ReLU(),
+      nn.Conv2d(Cout // 4, Cout // 4, 3, 1, 1),
+      nn.BatchNorm2d(Cout // 4),
+      nn.ReLU(),
+      nn.Conv2d(Cout // 4, Cout, 1, 1, 0)
+    )
+    if downsample:
+        self.shortcut = nn.Conv2d(Cin, Cout, 1, 2, 0)
+    else:
+      if Cin == Cout:
+        self.shortcut = nn.Identity()
+      else:
+        self.shortcut = nn.Conv2d(Cin, Cout, 1, 1, 0)
     ############################################################################
     #                                 END OF YOUR CODE                         #
     ############################################################################
