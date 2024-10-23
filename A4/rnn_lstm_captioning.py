@@ -336,10 +336,14 @@ class WordEmbedding(nn.Module):
 
         out = None
         ######################################################################
-        # TODO: Implement the forward pass for word embeddings.
+        # Implement the forward pass for word embeddings.
         ######################################################################
         # Replace "pass" statement with your code
-        pass
+        # pass
+        # 坑：这里dtype要和self.W_embed一样，不能和x一样（long）
+        out = torch.zeros((x.shape[0], x.shape[1], self.W_embed.shape[1]), dtype=self.W_embed.dtype, device=x.device)
+        for i in range(x.shape[0]):
+            out[i,:,:] = self.W_embed[x[i], :]
         ######################################################################
         #                           END OF YOUR CODE                         #
         ######################################################################
@@ -372,7 +376,7 @@ def temporal_softmax_loss(x, y, ignore_index=None):
     loss = None
 
     ##########################################################################
-    # TODO: Implement the temporal softmax loss function.
+    # Implement the temporal softmax loss function.
     #
     # REQUIREMENT: This part MUST be done in one single line of code!
     #
@@ -384,7 +388,9 @@ def temporal_softmax_loss(x, y, ignore_index=None):
     # all timesteps and *averaging* across the minibatch.
     ##########################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    loss = F.cross_entropy(x.reshape(x.shape[0] * x.shape[1], -1), y.reshape(-1), ignore_index=ignore_index,
+                           reduction='sum') / x.shape[0]
     ##########################################################################
     #                             END OF YOUR CODE                           #
     ##########################################################################
@@ -445,7 +451,7 @@ class CaptioningRNN(nn.Module):
         self.ignore_index = ignore_index
 
         ######################################################################
-        # TODO: Initialize the image captioning module. Refer to the TODO
+        # Initialize the image captioning module. Refer to the 
         # in the captioning_forward function on layers you need to create
         #
         # You may want to check the following pre-defined classes:
@@ -455,7 +461,20 @@ class CaptioningRNN(nn.Module):
         # (2) feature projection (from CNN pooled feature to h0)
         ######################################################################
         # Replace "pass" statement with your code
-        pass
+        # pass
+        self.feature_extract = ImageEncoder(pretrained=True)
+        if self.cell_type == "attn":
+            self.h0_changer = nn.Conv2d(self.feature_extract.out_channels, hidden_dim, 1)
+        else:
+            self.h0_changer = nn.Linear(self.feature_extract.out_channels, hidden_dim)
+        self.word_embedding = WordEmbedding(vocab_size, wordvec_dim)
+        if self.cell_type == "attn":
+            self.model = AttentionLSTM(wordvec_dim, hidden_dim)
+        elif self.cell_type == "lstm":
+            self.model = LSTM(wordvec_dim, hidden_dim)
+        else:
+            self.model = RNN(wordvec_dim, hidden_dim)
+        self.output_layer = nn.Linear(hidden_dim, vocab_size)
         ######################################################################
         #                            END OF YOUR CODE                        #
         ######################################################################
@@ -486,7 +505,7 @@ class CaptioningRNN(nn.Module):
 
         loss = 0.0
         ######################################################################
-        # TODO: Implement the forward pass for the CaptioningRNN.
+        # Implement the forward pass for the CaptioningRNN.
         # In the forward pass you will need to do the following:
         # (1) Use an affine transformation to project the image feature to
         #     the initial hidden state $h0$ (for RNN/LSTM, of shape (N, H)) or
@@ -506,7 +525,19 @@ class CaptioningRNN(nn.Module):
         # Do not worry about regularizing the weights or their gradients!
         ######################################################################
         # Replace "pass" statement with your code
-        pass
+        # pass
+        images_feature = self.feature_extract(images)
+        # shape: (B, out_channels, H / 32, W / 32) -> (N, 3, 224/32=7, 224/32=7)
+        if self.cell_type != "attn": # flatten (B,Cout,H,W) ->(B,Cout) 
+            images_feature = images_feature.reshape(images_feature.shape[0], images_feature.shape[1],-1) # (B,Cout,H,W) ->(B, Cout, H*W)
+            # 不能直接拉平，因为初始化的linear输入维度是Cout
+            images_feature = torch.mean(images_feature, dim=2) # (B, Cout, H*W) -> (B, Cout)
+        h0 = self.h0_changer(images_feature) # (B, H)
+        captions_in_vec = self.word_embedding(captions_in) # (N, T, H)
+        # x: Input data for the entire timeseries, of shape (N, T, D)； h0: Initial hidden state, of shape (N, H) 
+        hn = self.model(captions_in_vec, h0) # (N, T, H)
+        scores = self.output_layer(hn) # (N, T, H) -> (N, T, v)
+        loss = temporal_softmax_loss(scores, captions_out, ignore_index=self.ignore_index)
         ######################################################################
         #                           END OF YOUR CODE                         #
         ######################################################################
@@ -568,7 +599,41 @@ class CaptioningRNN(nn.Module):
         # would both be A.mean(dim=(2, 3)).
         #######################################################################
         # Replace "pass" statement with your code
-        pass
+        # pass
+        images_feature = self.feature_extract(images)
+        
+        # equivalent to global average pooling; only do for RNN/LSTM
+        if self.cell_type != "attn":
+            images_feature = images_feature.reshape(images_feature.shape[0], images_feature.shape[1],-1) # (B,Cout,H,W) ->(B, Cout, H*W)
+            images_feature = torch.mean(images_feature, dim=2) # (B, Cout, H*W) -> (B, Cout)
+
+        h0 = self.h0_changer(images_feature) # (B, H)
+        ht = h0.mean(dim=(2,3))
+        if self.cell_type == "lstm" or self.cell_type == "attn":
+          ct = ht
+
+        still_generating = torch.full((N,), True, device=images.device)
+        word = torch.full((N,), self._start, device=images.device) # <START> idx
+        
+        for i in range(max_length):
+            embedding = self.word_embedding(word) # (1)
+
+            # (2)
+            if self.cell_type == "rnn":
+                ht = self.feature_extract.step_forward(embedding, ht)
+            if self.cell_type == "lstm":
+                ht, ct = self.feature_extract.step_forward(embedding, ht, ct)
+            if self.cell_type == "attn":
+                attn, attn_weights_all[:,i,:,:] = dot_product_attention(ht, h0)
+                ht, ct = self.feature_extract.step_forward(embedding, ht, ct, attn)
+
+            scores = self._output(ht) # (3)
+
+            # (4)
+            word = torch.argmax(scores, dim=1) # next word
+            captions[:, i] = torch.where(
+                still_generating, word, self._null) # update running seqs
+            still_generating *= ~(word == self._end) # end sequence @ <END>
         ######################################################################
         #                           END OF YOUR CODE                         #
         ######################################################################
@@ -625,11 +690,20 @@ class LSTM(nn.Module):
                 next_c: Next cell state, of shape (N, H)
         """
         ######################################################################
-        # TODO: Implement the forward pass for a single timestep of an LSTM.
+        # Implement the forward pass for a single timestep of an LSTM.
         ######################################################################
         next_h, next_c = None, None
         # Replace "pass" statement with your code
-        pass
+        # pass
+        input_x = x @ self.Wx + prev_h @ self.Wh + self.b
+        i,f,o,g = torch.split(input_x, [prev_h.shape[1],] * 4, dim=1)
+        f = torch.sigmoid(f)
+        i = torch.sigmoid(i)
+        o = torch.sigmoid(o)
+        g = torch.tanh(g)
+
+        next_c = prev_c * f + g * i
+        next_h = torch.tanh(next_c) * o
         ######################################################################
         #                           END OF YOUR CODE                         #
         ######################################################################
@@ -659,11 +733,15 @@ class LSTM(nn.Module):
             h0
         )  # we provide the intial cell state c0 here for you!
         ######################################################################
-        # TODO: Implement the forward pass for an LSTM over entire timeseries
+        # Implement the forward pass for an LSTM over entire timeseries
         ######################################################################
         hn = None
         # Replace "pass" statement with your code
-        pass
+        # pass
+        hn = torch.zeros((x.shape[0], x.shape[1], h0.shape[1]), dtype=h0.dtype, device=x.device)
+        for t in range(x.shape[1]):
+            h0, c0 = self.step_forward(x[:,t,:], h0, c0)
+            hn[:,t,:] = h0
         ######################################################################
         #                           END OF YOUR CODE                         #
         ######################################################################
@@ -689,12 +767,18 @@ def dot_product_attention(prev_h, A):
 
     attn, attn_weights = None, None
     ##########################################################################
-    # TODO: Implement the scaled dot-product attention we described earlier. #
+    # Implement the scaled dot-product attention we described earlier. #
     # You will use this function for `AttentionLSTM` forward and sample      #
     # functions. HINT: Make sure you reshape attn_weights back to (N, 4, 4)! #
     ##########################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    align_scores = torch.sum((prev_h.view(N,H,1,1) * A), dim=1)  # 广播 ->(N, 4, 4)
+    align_scores /= (H ** 0.5) # 除以根号d
+    attn_weights = torch.softmax(align_scores.view(N, -1), dim=1) # 把方块图片拉平，进行softmax
+    attn_weights = attn_weights.reshape(N, D_a, D_a) # 重新变成图片形状
+    attn = A.view(N, H, -1) * attn_weights.view(N, 1, -1) # 广播，计算每张图片在每个通道上的attention(N, H, 宽*高)
+    attn = torch.sum(attn, dim=2) # 加和成每个H维度上的attention, 告诉后续更应该关注哪个dim
     ##########################################################################
     #                             END OF YOUR CODE                           #
     ##########################################################################
@@ -753,12 +837,21 @@ class AttentionLSTM(nn.Module):
         """
 
         #######################################################################
-        # TODO: Implement forward pass for a single timestep of attention LSTM.
+        # Implement forward pass for a single timestep of attention LSTM.
         # Feel free to re-use some of your code from `LSTM.step_forward()`.
         #######################################################################
         next_h, next_c = None, None
         # Replace "pass" statement with your code
-        pass
+        # pass
+        input_x = x @ self.Wx + prev_h @ self.Wh + attn @ self.Wattn +self.b
+        i,f,o,g = torch.split(input_x, [prev_h.shape[1],] * 4, dim=1)
+        f = torch.sigmoid(f)
+        i = torch.sigmoid(i)
+        o = torch.sigmoid(o)
+        g = torch.tanh(g)
+
+        next_c = prev_c * f + g * i
+        next_h = torch.tanh(next_c) * o
         ######################################################################
         #                           END OF YOUR CODE                         #
         ######################################################################
@@ -795,13 +888,18 @@ class AttentionLSTM(nn.Module):
         c0 = h0  # Initial cell state, of shape (N, H)
 
         ######################################################################
-        # TODO: Implement the forward pass for an LSTM over an entire time-  #
+        # Implement the forward pass for an LSTM over an entire time-  #
         # series. You should use the `dot_product_attention` function that   #
         # is defined outside this module.                                    #
         ######################################################################
         hn = None
         # Replace "pass" statement with your code
-        pass
+        # pass
+        hn = torch.zeros((x.shape[0], x.shape[1], h0.shape[1]), dtype=h0.dtype, device=x.device)
+        for t in range(x.shape[1]):
+            atten, _ = dot_product_attention(h0, A)
+            h0, c0 = self.step_forward(x[:,t,:], h0, c0, atten)
+            hn[:,t,:] = h0
         ######################################################################
         #                           END OF YOUR CODE                         #
         ######################################################################
