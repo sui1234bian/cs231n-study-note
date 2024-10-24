@@ -33,7 +33,7 @@ def compute_saliency_maps(X, y, model):
 
     saliency = None
     ##############################################################################
-    # TODO: Implement this function. Perform a forward and backward pass through #
+    # Implement this function. Perform a forward and backward pass through #
     # the model to compute the gradient of the correct class score with respect  #
     # to each input image. You first want to compute the loss over the correct   #
     # scores (we'll combine losses across a batch by summing), and then compute  #
@@ -41,7 +41,23 @@ def compute_saliency_maps(X, y, model):
     # Hint: X.grad.data stores the gradients                                     #
     ##############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    # def forward(self, x: torch.Tensor) -> torch.Tensor: cnn的forward
+        # x = self.features(x)
+        # x = self.classifier(x) 
+        # # self.classifier = nn.Sequential(nn.Dropout(p=dropout), final_conv, nn.ReLU(inplace=True), nn.AdaptiveAvgPool2d((1, 1)))
+        # return torch.flatten(x, 1)
+    scores = model(X) # (N, Class) 1000* 
+    # 不使用交叉熵的原因：计算显著性图的目的是确定输入图像的每个像素对最终分类结果的影响。因此，我们关心的是正确类别的原始分数，
+    # 而不是将其转化为概率值的结果（如通过 Softmax 函数），也不需要进一步计算损失。显著性图关注的是输入特征对最终预测的影响。
+    
+    loss = torch.sum(scores[:, y])
+    loss.backward()
+    # 现在X.grad.data包含了梯度信息，形状为(N, 3, H, W)，目标形状为(N, H, W)
+    X_grad_abs = torch.abs(X.grad.data) # 想要知道影响，所以计算绝对值
+    # 注意要用梯度信息
+    saliency = torch.max(X_grad_abs, dim=1)[0] # 计算每个channel的影响的最大值
+    # (原始分数越高，loss返回的梯度绝对值就越大，反应到最终结果图上就是越红)
     ##############################################################################
     #               END OF YOUR CODE                                             #
     ##############################################################################
@@ -71,7 +87,7 @@ def make_adversarial_attack(X, target_y, model, max_iter=100, verbose=True):
 
     learning_rate = 1
     ##############################################################################
-    # TODO: Generate an adversarial attack X_adv that the model will classify    #
+    # Generate an adversarial attack X_adv that the model will classify    #
     # as the class target_y. You should perform gradient ascent on the score     #
     # of the target class, stopping when the model is fooled.                    #
     # When computing an update step, first normalize the gradient:               #
@@ -84,7 +100,22 @@ def make_adversarial_attack(X, target_y, model, max_iter=100, verbose=True):
     # You can print your progress over iterations to check your algorithm.       #
     ##############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    for i in range(max_iter):
+        scores = model(X_adv) # (1, C)
+        loss = torch.sum(scores[:, target_y]) ### 这一步让模型以为target_y才是真实label
+        loss.backward()
+
+        with torch.no_grad():
+            ## 注意梯度是+，梯度下降是对于模型参数而言，而我们是改变图片，所以要增加梯度
+            X_adv += learning_rate * (X_adv.grad / torch.norm(X_adv.grad)) ## dX = learning_rate * g / ||g||_2
+            X_adv.grad.zero_()
+
+        if verbose:
+             print(f"[{i+1}] predicted class:", torch.argmax(scores, dim=1))
+
+        if torch.argmax(scores, dim=1) == target_y:
+            break
     ##############################################################################
     #                             END OF YOUR CODE                               #
     ##############################################################################
@@ -119,7 +150,14 @@ def class_visualization_step(img, target_y, model, **kwargs):
     # after each step.                                                     #
     ########################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    scores = model(img)
+    loss = torch.sum(scores[:, target_y]) + l2_reg * torch.sum(img ** 2)
+    loss.backward()
+
+    with torch.no_grad():
+        img += learning_rate * (img.grad / torch.norm(img.grad))
+        img.grad.zero_()
     ########################################################################
     #                             END OF YOUR CODE                         #
     ########################################################################
