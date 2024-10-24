@@ -241,7 +241,7 @@ def val(model, dataloader, loss_func, batch_size, device=torch.device("cpu")):
         total = total + len(pred_max)
         epoch_loss.append(loss.item())
 
-    avg_epoch_loss = sum(epoch_loss) / len(epoch_loss)
+    avg_epoch_loss = sum(epoch_loss) / (len(epoch_loss))
     return avg_epoch_loss / (batch_size * 4), n_correct / total
 
 

@@ -400,7 +400,7 @@ class MultiHeadAttention(nn.Module):
         ##########################################################################
         # Replace "pass" statement with your code
         # pass
-        self.num_heads = num_heads
+        self.heads = num_heads
         self.dim_in = dim_in
         self.dim_out = dim_out
         self.layers = nn.ModuleList()
@@ -679,7 +679,7 @@ class EncoderBlock(nn.Module):
         # Replace "pass" statement with your code
         # pass
         # 最后输出的dim还是维持不变的，这里dim_out这么写是因为后面的linear层还会乘回来
-        self.mha = MultiHeadAttention(num_heads=num_heads, dim_in=emb_dim, dim_out=emb_dim // num_heads) 
+        self.MultiHeadBlock = MultiHeadAttention(num_heads=num_heads, dim_in=emb_dim, dim_out=emb_dim // num_heads) 
         self.lynm1 = LayerNormalization(emb_dim)
         self.lynm2 = LayerNormalization(emb_dim)
         self.ffn = FeedForwardBlock(emb_dim, feedforward_dim)
@@ -710,7 +710,7 @@ class EncoderBlock(nn.Module):
         # Replace "pass" statement with your code
         # pass
         x_ = x
-        x = self.mha(x,x,x)
+        x = self.MultiHeadBlock(x,x,x)
         x = self.lynm1(x + x_)
         x = self.dropout(x)
         x_ = x
@@ -995,12 +995,14 @@ def position_encoding_simple(K: int, M: int) -> Tensor:
     """
     y = None
     ##############################################################################
-    # TODO: Given the length of input sequence K, construct a 1D Tensor of length#
+    # Given the length of input sequence K, construct a 1D Tensor of length#
     # K with nth element as n/K, where n starts from 0. Replicate this tensor M  #
     # times to create a tensor of the required output shape                      #
     ##############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    encodings = torch.linspace(0, 1, K + 1)[:-1]
+    y = torch.stack((encodings, ), dim=1).unsqueeze(0)
     ##############################################################################
     #               END OF YOUR CODE                                             #
     ##############################################################################
@@ -1022,13 +1024,22 @@ def position_encoding_sinusoid(K: int, M: int) -> Tensor:
     """
     y = None
     ##############################################################################
-    # TODO: Given the length of input sequence K and embedding dimension M       #
+    # Given the length of input sequence K and embedding dimension M       #
     # construct a tesnor of shape (K, M) where the value along the dimensions    #
     # follow the equations given in the notebook. Make sure to keep in mind the  #
     # alternating sines and cosines along the embedding dimension M.             #
     ##############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    y = torch.zeros((K, M))
+    for p in range(K):
+        for i in range((M+1) // 2):
+            a = 2 * i // M
+            if 2*i < M:
+                y[p, 2*i] = torch.sin(torch.tensor(p / 10000 ** a))
+            if 2*i + 1 < M:
+                y[p, 2*i+1] = torch.cos(torch.tensor(p / 10000 ** a))
+    y = y.unsqueeze(0)
     ##############################################################################
     #               END OF YOUR CODE                                             #
     ##############################################################################
@@ -1072,13 +1083,14 @@ class Transformer(nn.Module):
         """
         self.emb_layer = None
         ##########################################################################
-        # TODO: Initialize an Embedding layer mapping vocab_len to emb_dim. This #
+        # Initialize an Embedding layer mapping vocab_len to emb_dim. This #
         # is the very first input to our model and transform this input to       #
         # emb_dim that will stay the same throughout our model. Please use the   #
         # name of this layer as self.emb_layer                                   #
         ##########################################################################
         # Replace "pass" statement with your code
-        pass
+        # pass
+        self.emb_layer = nn.Embedding(vocab_len, embedding_dim=emb_dim)
         ##########################################################################
         #               END OF YOUR CODE                                         #
         ##########################################################################
@@ -1122,7 +1134,7 @@ class Transformer(nn.Module):
         a_emb_inp = a_emb[:, :-1] + ans_pos[:, :-1]
         dec_out = None
         ##########################################################################
-        # TODO: This portion consists of writing the forward part for the complete
+        # This portion consists of writing the forward part for the complete
         # Transformer. First, pass the q_emb_inp through the encoder, this will be
         # the encoder output which you should use as one of the decoder inputs.
         # Along with the encoder output, you should also construct an appropriate
@@ -1132,7 +1144,11 @@ class Transformer(nn.Module):
         # Hint: the mask shape will depend on the Tensor ans_b
         ##########################################################################
         # Replace "pass" statement with your code
-        pass
+        # pass
+        src_seq = self.encoder(q_emb_inp) # (N, K, M)
+        mask = get_subsequent_mask(ans_b[:, :-1]) # (N, K-1, K-1)
+        dec_out = self.decoder(a_emb_inp, src_seq, mask) # (N, K-1, M)
+        dec_out = dec_out.reshape(mask.shape[0] * mask.shape[1], -1) # (N*(K-1), M)
         ##########################################################################
         #               END OF YOUR CODE                                         #
         ##########################################################################
