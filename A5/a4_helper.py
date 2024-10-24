@@ -84,22 +84,22 @@ class VOC2007DetectionTiny(torch.utils.data.Dataset):
         """
         Try to download VOC dataset and save it to `dataset_dir`.
         """
-        import wget
+        # import wget
 
         os.makedirs(dataset_dir, exist_ok=True)
         # fmt: off
-        wget.download(
-            "https://web.eecs.umich.edu/~justincj/data/VOCtrainval_06-Nov-2007.tar",
-            out=dataset_dir,
-        )
-        wget.download(
-            "https://web.eecs.umich.edu/~justincj/data/voc07_train.json",
-            out=dataset_dir,
-        )
-        wget.download(
-            "https://web.eecs.umich.edu/~justincj/data/voc07_val.json",
-            out=dataset_dir,
-        )
+        # wget.download(
+        #     "https://web.eecs.umich.edu/~justincj/data/VOCtrainval_06-Nov-2007.tar",
+        #     out=dataset_dir,
+        # )
+        # wget.download(
+        #     "https://web.eecs.umich.edu/~justincj/data/voc07_train.json",
+        #     out=dataset_dir,
+        # )
+        # wget.download(
+        #     "https://web.eecs.umich.edu/~justincj/data/voc07_val.json",
+        #     out=dataset_dir,
+        # )
         # fmt: on
 
         # Extract TAR file:
