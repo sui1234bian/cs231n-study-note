@@ -2,8 +2,8 @@ import math
 from typing import Dict, List, Optional
 
 import torch
-from a4_helper_2022 import *
-from common_2022 import DetectorBackboneWithFPN, class_spec_nms, get_fpn_location_coords
+from a4_helper import *
+from common import DetectorBackboneWithFPN, class_spec_nms, get_fpn_location_coords
 from torch import nn
 from torch.nn import functional as F
 from torch.utils.data._utils.collate import default_collate
