@@ -255,8 +255,8 @@ def scaled_dot_product_no_loop_batch(
         weight = torch.masked_fill(weight, mask, -1e9)  # 赋予一个超大的负数，让这部分的exp后约等于0，模型不关注后续的权重
     # Replace "pass" statement with your code
     # pass
-    weight_softmax = torch.softmax(weight, dim=2) # (N, K, K)
-    y = torch.bmm(weight_softmax, value)
+    weights_softmax = torch.softmax(weight, dim=2) # (N, K, K)
+    y = torch.bmm(weights_softmax, value)
     ##############################################################################
     #               END OF YOUR CODE                                             #
     ##############################################################################
@@ -400,12 +400,12 @@ class MultiHeadAttention(nn.Module):
         ##########################################################################
         # Replace "pass" statement with your code
         # pass
-        self.heads = num_heads
+        self._num_heads = num_heads
         self.dim_in = dim_in
         self.dim_out = dim_out
-        self.layers = nn.ModuleList()
+        self.heads = nn.ModuleList()
         for _ in range(num_heads):
-            self.layers.append(SelfAttention(dim_in, dim_out, dim_out))
+            self.heads.append(SelfAttention(dim_in, dim_out, dim_out))
         self.w_combine = nn.Linear(dim_out * num_heads, dim_in)
 
         def cal_distribution(d_in, d_out):
@@ -457,7 +457,7 @@ class MultiHeadAttention(nn.Module):
         ##########################################################################
         # Replace "pass" statement with your code
         # pass
-        heads = [head(query, key, value, mask) for head in self.layers]
+        heads = [head(query, key, value, mask) for head in self.heads]
         y = torch.cat(heads, dim=2)
         y = self.w_combine(y)
         ##########################################################################
