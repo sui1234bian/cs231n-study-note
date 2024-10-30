@@ -66,12 +66,14 @@ class DetectorBackboneWithFPN(nn.Module):
             print(f"Shape of {level_name} features: {feature_shape}")
 
         ######################################################################
-        # TODO: Initialize additional Conv layers for FPN.                   #
+        # Initialize additional Conv layers for FPN.                   #
         #                                                                    #
         # Create THREE "lateral" 1x1 conv layers to transform (c3, c4, c5)   #
         # such that they all end up with the same `out_channels`.            #
+
         # Then create THREE "output" 3x3 conv layers to transform the merged #
         # FPN features to output (p3, p4, p5) features.                      #
+
         # All conv layers must have stride=1 and padding such that features  #
         # do not get downsampled due to 3x3 convs.                           #
         #                                                                    #
@@ -84,7 +86,23 @@ class DetectorBackboneWithFPN(nn.Module):
         self.fpn_params = nn.ModuleDict()
 
         # Replace "pass" statement with your code
-        pass
+        # pass
+        # 3-4-5-5-4-3
+        c3_channel = dummy_out_shapes[0][1][1]
+        c4_channel = dummy_out_shapes[1][1][1]
+        c5_channel = dummy_out_shapes[2][1][1]
+        self.c3 = nn.Conv2d(c3_channel, self.out_channels, 1, 1, 0)
+        self.c4 = nn.Conv2d(c4_channel, self.out_channels, 1, 1, 0)
+        self.c5 = nn.Conv2d(c5_channel, self.out_channels, 1, 1, 0)
+        self.p3 = nn.Conv2d(self.out_channels, self.out_channels, 3, 1, 2)
+        self.p4 = nn.Conv2d(self.out_channels, self.out_channels, 3, 1, 2)
+        self.p5 = nn.Conv2d(self.out_channels, self.out_channels, 3, 1, 2)
+        self.fpn_params["c3"] = self.c3
+        self.fpn_params["c4"] = self.c4
+        self.fpn_params["c5"] = self.c5
+        self.fpn_params["p3"] = self.p3
+        self.fpn_params["p4"] = self.p4
+        self.fpn_params["p5"] = self.p5
         ######################################################################
         #                            END OF YOUR CODE                        #
         ######################################################################
@@ -105,13 +123,23 @@ class DetectorBackboneWithFPN(nn.Module):
 
         fpn_feats = {"p3": None, "p4": None, "p5": None}
         ######################################################################
-        # TODO: Fill output FPN features (p3, p4, p5) using RegNet features  #
+        # Fill output FPN features (p3, p4, p5) using RegNet features  #
         # (c3, c4, c5) and FPN conv layers created above.                    #
         # HINT: Use `F.interpolate` to upsample FPN features.                #
         ######################################################################
 
         # Replace "pass" statement with your code
-        pass
+        # pass
+        fpn_strides = self.fpn_strides
+        p4_shape = images.shape[2] // fpn_strides["p4"]
+        p3_shape = images.shape[2] // fpn_strides["p3"]
+        c3_transform = self.c3(backbone_feats["c3"])
+        c4_transform = self.c4(backbone_feats["c4"])
+        c5_transform = self.c5(backbone_feats["c5"])
+        fpn_feats["p5"] = self.p5(c5_transform)
+        # print(F.interpolate(fpn_feats["p5"], (p4_shape, p4_shape)).shape, c4_transform.shape)
+        fpn_feats["p4"] = self.p4(F.interpolate(fpn_feats["p5"], (p4_shape, p4_shape)) + c4_transform)
+        fpn_feats["p3"] = self.p3(F.interpolate(fpn_feats["p4"], (p3_shape, p3_shape)) + c3_transform)
         ######################################################################
         #                            END OF YOUR CODE                        #
         ######################################################################
