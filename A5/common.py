@@ -162,10 +162,13 @@ def get_fpn_location_coords(
     Args:
         shape_per_fpn_level: Shape of the FPN feature level, dictionary of keys
             {"p3", "p4", "p5"} and feature shapes `(B, C, H, W)` as values.
+        {'p3': torch.Size([2, 64, 30, 30]), 'p4': torch.Size([2, 64, 16, 16]), 'p5': torch.Size([2, 64, 9, 9])} 
+
         strides_per_fpn_level: Dictionary of same keys as above, each with an
             integer value giving the stride of corresponding FPN level.
             See `backbone.py` for more details.
-
+        {'p3': 8, 'p4': 16, 'p5': 32}
+            
     Returns:
         Dict[str, torch.Tensor]
             Dictionary with same keys as `shape_per_fpn_level` and values as
@@ -177,15 +180,22 @@ def get_fpn_location_coords(
     location_coords = {
         level_name: None for level_name, _ in shape_per_fpn_level.items()
     }
-
+    # print(shape_per_fpn_level, strides_per_fpn_level)
     for level_name, feat_shape in shape_per_fpn_level.items():
         level_stride = strides_per_fpn_level[level_name]
 
         ######################################################################
-        # TODO: Implement logic to get location co-ordinates below.          #
+        # Implement logic to get location co-ordinates below.          #
         ######################################################################
         # Replace "pass" statement with your code
-        pass
+        # pass
+        _, _, H, W = feat_shape
+        x_pos = torch.arange(H, device=device, dtype=dtype).repeat(W, 1).t() # 转置完为000,111,222这种张量 (H, W)
+        y_pos = torch.arange(W, device=device, dtype=dtype).repeat(H, 1) # 为012,012,012这种张量 (H, W)
+        x_pos = level_stride * (x_pos + 0.5) # 转置完为444,888,12 12 12这种张量 (H, W)
+        y_pos = level_stride * (y_pos + 0.5) # 转置完为48 12,48 12,48 12这种张量 (H, W)
+        x_y = torch.cat(((x_pos.unsqueeze(2), y_pos.unsqueeze(2))), dim=2) # 为一个x对应1个y
+        location_coords[level_name] = x_y.view(H*W, 2)
         ######################################################################
         #                             END OF YOUR CODE                       #
         ######################################################################

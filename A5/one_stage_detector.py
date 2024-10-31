@@ -43,7 +43,7 @@ class FCOSPredictionNetwork(nn.Module):
         super().__init__()
 
         ######################################################################
-        # TODO: Create a stem of alternating 3x3 convolution layers and RELU
+        # Create a stem of alternating 3x3 convolution layers and RELU
         # activation modules. Note there are two separate stems for class and
         # box stem. The prediction layers for box regression and centerness
         # operate on the output of `stem_box`.
@@ -60,14 +60,29 @@ class FCOSPredictionNetwork(nn.Module):
         stem_cls = []
         stem_box = []
         # Replace "pass" statement with your code
-        pass
+        # pass
+        for i in range(len(stem_channels)):
+            if i == 0:
+                cls_layer = nn.Conv2d(in_channels, stem_channels[i], 3, 1, "same")
+                box_layer = nn.Conv2d(in_channels, stem_channels[i], 3, 1, "same")
+            else:
+                cls_layer = nn.Conv2d(stem_channels[i-1], stem_channels[i], 3, 1, "same")
+                box_layer = nn.Conv2d(stem_channels[i-1], stem_channels[i], 3, 1, "same")
+            nn.init.normal_(cls_layer.weight, 0, 0.01)
+            nn.init.normal_(box_layer.weight, 0, 0.01)
+            nn.init.zeros_(cls_layer.bias)
+            nn.init.zeros_(box_layer.bias)
+            stem_cls.append(cls_layer)
+            stem_box.append(box_layer)
+            stem_cls.append(nn.ReLU())
+            stem_box.append(nn.ReLU())
 
         # Wrap the layers defined by student into a `nn.Sequential` module:
         self.stem_cls = nn.Sequential(*stem_cls)
         self.stem_box = nn.Sequential(*stem_box)
 
         ######################################################################
-        # TODO: Create THREE 3x3 conv layers for individually predicting three
+        # Create THREE 3x3 conv layers for individually predicting three
         # things at every location of feature map:
         #     1. object class logits (`num_classes` outputs)
         #     2. box regression deltas (4 outputs: LTRB deltas from locations)
@@ -89,8 +104,15 @@ class FCOSPredictionNetwork(nn.Module):
 
         # Replace "pass" statement with your code
         # pass
-        
-    
+        self.pred_cls = nn.Conv2d(stem_channels[-1], num_classes, 3, 1, "same")
+        self.pred_box = nn.Conv2d(stem_channels[-1], 4, 3, 1, "same")
+        self.pred_ctr = nn.Conv2d(stem_channels[-1], 1, 3, 1, "same")
+        nn.init.normal_(self.pred_cls.weight, 0, 0.01)
+        nn.init.normal_(self.pred_box.weight, 0, 0.01)
+        nn.init.normal_(self.pred_ctr.weight, 0, 0.01)
+        # nn.init.zeros_(self.pred_cls.bias)
+        nn.init.zeros_(self.pred_box.bias)
+        nn.init.zeros_(self.pred_ctr.bias)
         ######################################################################
         #                           END OF YOUR CODE                         #
         ######################################################################
@@ -120,7 +142,7 @@ class FCOSPredictionNetwork(nn.Module):
         """
 
         ######################################################################
-        # TODO: Iterate over every FPN feature map and obtain predictions using
+        # Iterate over every FPN feature map and obtain predictions using
         # the layers defined above. Remember that prediction layers of box
         # regression and centerness will operate on output of `stem_box`,
         # and classification layer operates separately on `stem_cls`.
@@ -137,7 +159,21 @@ class FCOSPredictionNetwork(nn.Module):
         centerness_logits = {}
 
         # Replace "pass" statement with your code
-        pass
+        # pass
+        for i in range(3, 6):
+            pp = feats_per_fpn_level[f"p{i}"]
+            pp_c = self.stem_cls(pp)
+            pp_r = self.stem_box(pp)
+            cls_p = self.pred_cls(pp_c)
+            ctr_p = self.pred_box(pp_c)
+            box_p = self.pred_box(pp_r)
+            cls_p = cls_p.reshape(cls_p.shape[0], cls_p.shape[1], -1).permute(0, 2, 1)
+            ctr_p = ctr_p.reshape(ctr_p.shape[0], ctr_p.shape[1], -1).permute(0, 2, 1)
+            box_p = box_p.reshape(box_p.shape[0], box_p.shape[1], -1).permute(0, 2, 1)
+            class_logits[f"p{i}"] = cls_p
+            boxreg_deltas[f"p{i}"] = box_p
+            centerness_logits[f"p{i}"] = ctr_p
+
         ######################################################################
         #                           END OF YOUR CODE                         #
         ######################################################################
@@ -272,7 +308,8 @@ def fcos_get_deltas_from_locations(
     deltas = None
 
     # Replace "pass" statement with your code
-    pass
+    # pass
+    
     ##########################################################################
     #                             END OF YOUR CODE                           #
     ##########################################################################
