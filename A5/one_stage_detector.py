@@ -301,7 +301,7 @@ def fcos_get_deltas_from_locations(
             are normalized by feature stride.
     """
     ##########################################################################
-    # TODO: Implement the logic to get deltas from feature locations.        #
+    # Implement the logic to get deltas from feature locations.        #
     ##########################################################################
     # Set this to Tensor of shape (N, 4) giving deltas (left, top, right, bottom)
     # from the locations to GT box edges, normalized by FPN stride.
@@ -309,7 +309,17 @@ def fcos_get_deltas_from_locations(
 
     # Replace "pass" statement with your code
     # pass
-    
+    _, D = gt_boxes.shape
+    deltas = gt_boxes.clone()
+    if D == 5:
+        deltas = deltas[:, :4]
+    all_minus_one_rows = torch.all(deltas == -1, dim=1)
+    indices = torch.nonzero(all_minus_one_rows).squeeze()
+    deltas[:, 0] = (locations[:, 0] - deltas[:, 0]) / stride
+    deltas[:, 1] = (locations[:, 1] - deltas[:, 1]) / stride
+    deltas[:, 2] = (deltas[:, 2] - locations[:, 0]) / stride
+    deltas[:, 3] = (deltas[:, 3] - locations[:, 1]) / stride
+    deltas[indices, :] = -1
     ##########################################################################
     #                             END OF YOUR CODE                           #
     ##########################################################################
@@ -344,14 +354,23 @@ def fcos_apply_deltas_to_locations(
             resulting boxes `(x1, y1, x2, y2)`, absolute in image dimensions.
     """
     ##########################################################################
-    # TODO: Implement the transformation logic to get boxes.                 #
+    # Implement the transformation logic to get boxes.                 #
     #                                                                        #
     # NOTE: The model predicted deltas MAY BE negative, which is not valid   #
     # for our use-case because the feature center must lie INSIDE the final  #
     # box. Make sure to clip them to zero.                                   #
     ##########################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    output_boxes = deltas.clone()
+    all_minus_one_rows = torch.all(deltas == -1, dim=1)
+    indices = torch.nonzero(all_minus_one_rows).squeeze()
+    output_boxes[:, 0] = locations[:, 0] - deltas[:, 0] * stride
+    output_boxes[:, 1] = locations[:, 1] - deltas[:, 1] * stride
+    output_boxes[:, 2] = deltas[:, 2] * stride + locations[:, 0] 
+    output_boxes[:, 3] = deltas[:, 3] * stride + locations[:, 1] 
+    output_boxes[indices, 0:2] = locations[indices, :]
+    output_boxes[indices, 2:4] = locations[indices, :]
     ##########################################################################
     #                             END OF YOUR CODE                           #
     ##########################################################################
@@ -377,11 +396,17 @@ def fcos_make_centerness_targets(deltas: torch.Tensor):
             Tensor of shape `(N, )` giving centerness regression targets.
     """
     ##########################################################################
-    # TODO: Implement the centerness calculation logic.                      #
+    # Implement the centerness calculation logic.                      #
     ##########################################################################
     centerness = None
     # Replace "pass" statement with your code
-    pass
+    # pass
+    lr = deltas[:, [0,2]].clone()
+    tb = deltas[:, [1,3]].clone()
+    all_minus_one_rows = torch.all(deltas == -1, dim=1)
+    indices = torch.nonzero(all_minus_one_rows).squeeze()
+    centerness = torch.sqrt((lr.min(dim=1)[0] * tb.min(dim=1)[0]) / (lr.max(dim=1)[0] * tb.max(dim=1)[0]))
+    centerness[indices] = -1
     ##########################################################################
     #                             END OF YOUR CODE                           #
     ##########################################################################
@@ -405,13 +430,15 @@ class FCOS(nn.Module):
         self.num_classes = num_classes
 
         ######################################################################
-        # TODO: Initialize backbone and prediction network using arguments.  #
+        # Initialize backbone and prediction network using arguments.  #
         ######################################################################
         # Feel free to delete these two lines: (but keep variable names same)
         self.backbone = None
         self.pred_net = None
         # Replace "pass" statement with your code
-        pass
+        # pass
+        self.backbone = DetectorBackboneWithFPN(fpn_channels)
+        self.pred_net = FCOSPredictionNetwork(num_classes, fpn_channels, stem_channels)
         ######################################################################
         #                           END OF YOUR CODE                         #
         ######################################################################
@@ -447,7 +474,7 @@ class FCOS(nn.Module):
         """
 
         ######################################################################
-        # TODO: Process the image through backbone, FPN, and prediction head #
+        # Process the image through backbone, FPN, and prediction head #
         # to obtain model predictions at every FPN location.                 #
         # Get dictionaries of keys {"p3", "p4", "p5"} giving predicted class #
         # logits, deltas, and centerness.                                    #
@@ -455,10 +482,11 @@ class FCOS(nn.Module):
         # Feel free to delete this line: (but keep variable names same)
         pred_cls_logits, pred_boxreg_deltas, pred_ctr_logits = None, None, None
         # Replace "pass" statement with your code
-        pass
-
+        # pass
+        img_feature = self.backbone(images)
+        pred_cls_logits, pred_boxreg_deltas, pred_ctr_logits = self.pred_net(img_feature)
         ######################################################################
-        # TODO: Get absolute co-ordinates `(xc, yc)` for every location in
+        # Get absolute co-ordinates `(xc, yc)` for every location in
         # FPN levels.
         #
         # HINT: You have already implemented everything, just have to
@@ -467,7 +495,11 @@ class FCOS(nn.Module):
         # Feel free to delete this line: (but keep variable names same)
         locations_per_fpn_level = None
         # Replace "pass" statement with your code
-        pass
+        # pass
+        fpn_feats_shapes = {
+            level_name: feat.shape for level_name, feat in img_feature.items()
+        }
+        locations_per_fpn_level = get_fpn_location_coords(fpn_feats_shapes, self.backbone.fpn_strides)
         ######################################################################
         #                           END OF YOUR CODE                         #
         ######################################################################
@@ -493,8 +525,10 @@ class FCOS(nn.Module):
         # boxes for locations per FPN level, per image. Fill this list:
         matched_gt_boxes = []
         # Replace "pass" statement with your code
-        pass
-
+        # pass
+        matched_boxes_per_fpn_level = fcos_match_locations_to_gt(
+            locations_per_fpn_level, self.backbone.fpn_strides, gt_boxes
+        )
         # Calculate GT deltas for these matched boxes. Similar structure
         # as `matched_gt_boxes` above. Fill this list:
         matched_gt_deltas = []
