@@ -22,7 +22,7 @@ class VAE(nn.Module):
         self.decoder = None
 
         ###########################################################################
-        # TODO: Implement the fully-connected encoder architecture described in   #
+        # Implement the fully-connected encoder architecture described in   #
         # the notebook. Specifically, self.encoder should be a network that       #
         # inputs a batch of input images of shape (N, 1, H, W) into a batch of    #
         # hidden features of shape (N, H_d). Set up self.mu_layer and             #
@@ -33,17 +33,39 @@ class VAE(nn.Module):
         ###########################################################################
         # Replace "pass" statement with your code
         # pass
-        self.flatten = nn.Flatten(start_dim=1)
-        self.hidden_dim = 
+        self.hidden_dim = 256
+        self.encoder = nn.Sequential(
+            nn.Flatten(start_dim=1),
+            nn.Linear(self.input_size, self.hidden_dim),
+            nn.ReLU(),
+            nn.Linear(self.hidden_dim, self.hidden_dim),
+            nn.ReLU(),
+            nn.Linear(self.hidden_dim, self.hidden_dim),
+            nn.ReLU(),
+        )
+        self.mu_layer = nn.Linear(self.hidden_dim, self.latent_size)
+        self.logvar_layer = nn.Linear(self.hidden_dim, self.latent_size)
         
         ###########################################################################
-        # TODO: Implement the fully-connected decoder architecture described in   #
+        # Implement the fully-connected decoder architecture described in   #
         # the notebook. Specifically, self.decoder should be a network that inputs#
         # a batch of latent vectors of shape (N, Z) and outputs a tensor of       #
         # estimated images of shape (N, 1, H, W).                                 #
         ###########################################################################
         # Replace "pass" statement with your code
-        pass
+        # pass
+        hw = int((self.input_size ** 0.5) // 1)
+        self.decoder = nn.Sequential(
+            nn.Linear(self.latent_size, self.hidden_dim),
+            nn.ReLU(),
+            nn.Linear(self.hidden_dim, self.hidden_dim),
+            nn.ReLU(),
+            nn.Linear(self.hidden_dim, self.hidden_dim),
+            nn.ReLU(),
+            nn.Linear(self.hidden_dim, self.input_size),
+            nn.Sigmoid(),
+            nn.Unflatten(dim=1, unflattened_size=(1, hw, hw))
+        )
         ###########################################################################
         #                                      END OF YOUR CODE                   #
         ###########################################################################
@@ -67,14 +89,19 @@ class VAE(nn.Module):
         mu = None
         logvar = None
         ###########################################################################
-        # TODO: Implement the forward pass by following these steps               #
+        # Implement the forward pass by following these steps               #
         # (1) Pass the input batch through the encoder model to get posterior     #
         #     mu and logvariance                                                  #
         # (2) Reparametrize to compute  the latent vector z                       #
         # (3) Pass z through the decoder to resconstruct x                        #
         ###########################################################################
         # Replace "pass" statement with your code
-        pass
+        # pass
+        x = self.encoder(x)
+        mu = self.mu_layer(x)
+        logvar = self.logvar_layer(x)
+        z = reparametrize(mu, logvar)
+        x_hat = self.decoder(z)
         ###########################################################################
         #                                      END OF YOUR CODE                   #
         ###########################################################################
@@ -178,7 +205,8 @@ def reparametrize(mu, logvar):
     # scaling by posterior mu and sigma to estimate z                             #
     ###############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    
     ###############################################################################
     #                              END OF YOUR CODE                               #
     ###############################################################################
