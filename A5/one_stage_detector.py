@@ -165,7 +165,7 @@ class FCOSPredictionNetwork(nn.Module):
             pp_c = self.stem_cls(pp)
             pp_r = self.stem_box(pp)
             cls_p = self.pred_cls(pp_c)
-            ctr_p = self.pred_box(pp_c)
+            ctr_p = self.pred_ctr(pp_c)
             box_p = self.pred_box(pp_r)
             cls_p = cls_p.reshape(cls_p.shape[0], cls_p.shape[1], -1).permute(0, 2, 1)
             ctr_p = ctr_p.reshape(ctr_p.shape[0], ctr_p.shape[1], -1).permute(0, 2, 1)
@@ -320,6 +320,7 @@ def fcos_get_deltas_from_locations(
     deltas[:, 2] = (deltas[:, 2] - locations[:, 0]) / stride
     deltas[:, 3] = (deltas[:, 3] - locations[:, 1]) / stride
     deltas[indices, :] = -1
+    # 目的是基于特征位置来调整预测框，使其更加准确地覆盖目标物体
     ##########################################################################
     #                             END OF YOUR CODE                           #
     ##########################################################################
@@ -499,7 +500,10 @@ class FCOS(nn.Module):
         fpn_feats_shapes = {
             level_name: feat.shape for level_name, feat in img_feature.items()
         }
-        locations_per_fpn_level = get_fpn_location_coords(fpn_feats_shapes, self.backbone.fpn_strides)
+        # 输出每个p下的尺寸H W
+        locations_per_fpn_level = get_fpn_location_coords(fpn_feats_shapes, self.backbone.fpn_strides, 
+                                                          device=images.device, dtype=images.dtype)  
+        # 输出每个尺度下的点阵坐标
         ######################################################################
         #                           END OF YOUR CODE                         #
         ######################################################################
@@ -517,7 +521,7 @@ class FCOS(nn.Module):
             # fmt: on
 
         ######################################################################
-        # TODO: Assign ground-truth boxes to feature locations. We have this
+        # Assign ground-truth boxes to feature locations. We have this
         # implemented in a `fcos_match_locations_to_gt`. This operation is NOT
         # batched so call it separately per GT boxes in batch.
         ######################################################################
@@ -526,27 +530,38 @@ class FCOS(nn.Module):
         matched_gt_boxes = []
         # Replace "pass" statement with your code
         # pass
-        matched_boxes_per_fpn_level = fcos_match_locations_to_gt(
-            locations_per_fpn_level, self.backbone.fpn_strides, gt_boxes
-        )
+        for gt in gt_boxes:
+            matched_gt_boxes.append(fcos_match_locations_to_gt(locations_per_fpn_level, self.backbone.fpn_strides, gt))
+        # Dict[str, torch.Tensor]，每个目标一个字典，可能包含多个框
+        # 对于每个gt_box,输出一个字典，包含p3p4p5，每个点是否在gt_box里面，不在就是-1-1-1-1-1，在就是坐标+类别
+        # 就是之前的点阵，在框里面的保留坐标
         # Calculate GT deltas for these matched boxes. Similar structure
         # as `matched_gt_boxes` above. Fill this list:
         matched_gt_deltas = []
         # Replace "pass" statement with your code
-        pass
+        # pass
+        for matched_gt_box in matched_gt_boxes:  # p3:一堆坐标
+            delta = {}
+            for (p, box) in matched_gt_box.items():
+                # 输入是点阵，gt_box之后的点阵
+                delta[p] = fcos_get_deltas_from_locations(locations_per_fpn_level[p], box, self.backbone.fpn_strides[p])
+            matched_gt_deltas.append(delta)
+        # Dict[str, torch.Tensor]，每个目标一个字典，可能包含多个框
         ######################################################################
         #                           END OF YOUR CODE                         #
         ######################################################################
 
         # Collate lists of dictionaries, to dictionaries of batched tensors.
         # These are dictionaries with keys {"p3", "p4", "p5"} and values as
-        # tensors of shape (batch_size, locations_per_fpn_level, 5 or 4)
+        # tensors of shape (batch_size, locations_per_fpn_level, 5 or 4)  # 原来是b个字典，现在合并成p3,p4,p5， 3个字典，tensor变成b * (H * W) * 
         matched_gt_boxes = default_collate(matched_gt_boxes)
         matched_gt_deltas = default_collate(matched_gt_deltas)
 
+        # print(matched_gt_boxes["p3"].shape) # torch.Size([16, 900, 5])
+
         # Combine predictions and GT from across all FPN levels.
-        # shape: (batch_size, num_locations_across_fpn_levels, ...)
-        matched_gt_boxes = self._cat_across_fpn_levels(matched_gt_boxes)
+        # shape: (batch_size, num_locations_across_fpn_levels, ...) # b * sum(pi * (Hi * Wi)) *  4or5
+        matched_gt_boxes = self._cat_across_fpn_levels(matched_gt_boxes) # # b * sum(pi * (Hi * Wi)) *  5
         matched_gt_deltas = self._cat_across_fpn_levels(matched_gt_deltas)
         pred_cls_logits = self._cat_across_fpn_levels(pred_cls_logits)
         pred_boxreg_deltas = self._cat_across_fpn_levels(pred_boxreg_deltas)
@@ -558,7 +573,7 @@ class FCOS(nn.Module):
         self._normalizer = 0.9 * self._normalizer + 0.1 * pos_loc_per_image
 
         #######################################################################
-        # TODO: Calculate losses per location for classification, box reg and
+        # Calculate losses per location for classification, box reg and
         # centerness. Remember to set box/centerness losses for "background"
         # positions to zero.
         ######################################################################
@@ -566,7 +581,29 @@ class FCOS(nn.Module):
         loss_cls, loss_box, loss_ctr = None, None, None
 
         # Replace "pass" statement with your code
-        pass
+        # pass
+        # 1. Classification logits: `(batch_size, sum(pi * (Hi * Wi)), num_classes)`. # torch.Size([16, 1237, 20])
+        # 2. Box regression deltas: `(batch_size, sum(pi * (Hi * Wi)), 4)`
+        # 3. Centerness logits:     `(batch_size, sum(pi * (Hi * Wi)), 1)`
+        # 分类loss，先转换target的形式
+        matched_gt_classes = matched_gt_boxes[:, :, 4].to(torch.int64) # b * sum(pi * (Hi * Wi)) torch.Size([16, 1237]) 取出最后的类别列
+        matched_gt_classes[matched_gt_classes == -1] = self.num_classes  # 识别为背景的变为C+1
+        # 根据focal_loss函数要求需要转变为one_hot
+        target_onehot = F.one_hot(matched_gt_classes, self.num_classes+1).to(pred_cls_logits.dtype) # torch.Size([16, 1237, 21])
+        target_onehot = target_onehot[:, :, :-1] # torch.Size([16, 1237, 20]) 不去计算背景部分的loss
+        loss_cls = sigmoid_focal_loss(inputs=pred_cls_logits, targets=target_onehot)
+
+        # 盒子的loss # Multiply with 0.25 to average across four LTRB components.
+        loss_box = 0.25 * F.l1_loss(pred_boxreg_deltas, matched_gt_deltas, reduction="none") # "none"保证形状不变 torch.Size([16, 1237, 4])
+        loss_box[matched_gt_deltas < 0] *= 0.0 # 不计算背景点的loss
+        # 中心点的loss
+        B, N, _ = pred_ctr_logits.shape
+        gt_ctr = fcos_make_centerness_targets(matched_gt_deltas.reshape(-1, 4)).reshape(B, N, -1)  # 函数接受(N, 4)
+        # print(pred_ctr_logits.shape, gt_ctr.shape)
+        loss_ctr = F.binary_cross_entropy_with_logits(
+            pred_ctr_logits, gt_ctr, reduction="none"
+        )
+        loss_ctr[gt_ctr < 0] *= 0.0
         ######################################################################
         #                            END OF YOUR CODE                        #
         ######################################################################
@@ -650,31 +687,39 @@ class FCOS(nn.Module):
             #      and width of input image.
             ##################################################################
             # Feel free to delete this line: (but keep variable names same)
+            # 得到是p3的尺度 900 * 1
             level_pred_boxes, level_pred_classes, level_pred_scores = (
                 None,
                 None,
                 None,  # Need tensors of shape: (N, 4) (N, ) (N, )
             )
-
+            
             # Compute geometric mean of class logits and centerness:
             level_pred_scores = torch.sqrt(
                 level_cls_logits.sigmoid_() * level_ctr_logits.sigmoid_()
             )
             # Step 1:
             # Replace "pass" statement with your code
-            pass
-
+            # pass
+            level_max_scores, level_max_class = torch.max(level_pred_scores, dim=1)
             # Step 2:
             # Replace "pass" statement with your code
-            pass
-
+            # pass
+            retain = torch.where(level_max_scores > test_score_thresh)
+            level_pred_scores, level_pred_classes = level_max_scores[retain], level_max_class[retain]  
+            # 删掉预测小于0.3的点，保留剩余点的预测类别和得分
             # Step 3:
             # Replace "pass" statement with your code
-            pass
-
+            # pass
+            level_pred_boxes = fcos_apply_deltas_to_locations(level_deltas, level_locations, self.backbone.fpn_strides[level_name])  # 得到坐标
             # Step 4: Use `images` to get (height, width) for clipping.
             # Replace "pass" statement with your code
-            pass
+            # pass
+            level_pred_boxes = level_pred_boxes[retain] # 也要把无关点删了
+            hh, ww = images.shape[-2:]  # 得到图片的h w,将最终预测的尺寸锁到图片范围内部
+            level_pred_boxes[:, [0,2]] = torch.clamp(level_pred_boxes[:, [0,2]], min=0, max=ww)
+            level_pred_boxes[:, [1,3]] = torch.clamp(level_pred_boxes[:, [1,3]], min=0, max=hh)
+            # 最后多余的点用nms处理掉
             ##################################################################
             #                          END OF YOUR CODE                      #
             ##################################################################

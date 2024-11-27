@@ -9,6 +9,7 @@ from typing import Dict, Tuple
 import torch
 from torch import nn
 from torch.nn import functional as F
+import torchvision
 from torchvision import models
 from torchvision.models import feature_extraction
 
@@ -223,7 +224,7 @@ def nms(boxes: torch.Tensor, scores: torch.Tensor, iou_threshold: float = 0.5):
 
     keep = None
     #############################################################################
-    # TODO: Implement non-maximum suppression which iterates the following:     #
+    # Implement non-maximum suppression which iterates the following:     #
     #       1. Select the highest-scoring box among the remaining ones,         #
     #          which has not been chosen in this step before                    #
     #       2. Eliminate boxes with IoU > threshold                             #
@@ -234,11 +235,62 @@ def nms(boxes: torch.Tensor, scores: torch.Tensor, iou_threshold: float = 0.5):
     # github.com/pytorch/vision/blob/main/torchvision/csrc/ops/cpu/nms_kernel.cpp
     #############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass
+    DEVICE = boxes.device
+    def remove_row(mat:torch.Tensor, row_idx:int) -> torch.Tensor:
+        if row_idx == mat.shape[0]-1:
+            mat = mat[:row_idx]
+        else:
+            mat = torch.cat((mat[:row_idx], mat[row_idx+1:]), dim=0)
+        return mat
+    
+    def cal_iou(tp_box:torch.Tensor, target_box:torch.Tensor) -> float:
+        xx1 = torch.max(tp_box[0], target_box[0])
+        yy1 = torch.max(tp_box[1], target_box[1])
+        xx2 = torch.min(tp_box[2], target_box[2])
+        yy2 = torch.min(tp_box[3], target_box[3])
+        ww = torch.max(xx2 - xx1, torch.tensor(0.0,device=DEVICE))
+        hh = torch.max(yy2 - yy1, torch.tensor(0.0,device=DEVICE))
+        i_area = ww * hh
+        area1 = (tp_box[2] - tp_box[0]) * (tp_box[3] - tp_box[1])
+        area2 = (target_box[2] - target_box[0]) * (target_box[3] - target_box[1])
+        u_area = area1 + area2 - i_area
+        return i_area / u_area
+        # 左上角为直角坐标系的原点,而且都是正的
+        # (0,0)
+        #   .——.——.——.——
+        #   |  |  |  |
+        #   .——.——.——.——
+        #   |  |  |  |
+        #   .——.——.——.——
+        #   |  |  |  |
+    
+    keep = []
+    
+    N = scores.shape[0]
+    indice = torch.arange(N, device=DEVICE).reshape(-1, 1)
+    b_s_i = torch.concat((torch.concat((indice, scores.clone().reshape(-1, 1)), dim=1), boxes.clone()), dim=1) # (N, 6)
+    while b_s_i.numel() > 0:
+        max_row_index = torch.argmax(b_s_i[:, 1]) # 取出最大行索引
+        max_true_id = b_s_i[max_row_index, 0] # 真实索引
+        keep.append(max_true_id)
+        b_s_i = remove_row(b_s_i, max_row_index)
+        for i in range(b_s_i.shape[0]):    
+            remove_lst = []        
+            iou = cal_iou(boxes[int(b_s_i[i, 0])], boxes[int(max_true_id)])
+            if iou > iou_threshold:
+                remove_lst.append(i)
+        for i in range(len(remove_lst)):
+            b_s_i = remove_row(b_s_i, remove_lst[i] - i)  # 保证减对行，所以-i
+    keep = torch.tensor(keep, device=DEVICE).to(torch.long)
     #############################################################################
     #                              END OF YOUR CODE                             #
     #############################################################################
     return keep
+
+# def nms(boxes: torch.Tensor, scores: torch.Tensor, iou_threshold: float = 0.5):
+#     keep = torchvision.ops.nms(boxes, scores, iou_threshold)
+#     return keep
 
 
 def class_spec_nms(
@@ -261,5 +313,6 @@ def class_spec_nms(
     max_coordinate = boxes.max()
     offsets = class_ids.to(boxes) * (max_coordinate + torch.tensor(1).to(boxes))
     boxes_for_nms = boxes + offsets[:, None]
-    keep = nms(boxes_for_nms, scores, iou_threshold)
+    # keep = nms(boxes_for_nms, scores, iou_threshold)
+    keep = torchvision.ops.nms(boxes_for_nms, scores, iou_threshold)
     return keep
