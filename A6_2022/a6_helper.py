@@ -287,7 +287,31 @@ def show_images(images):
         ax.set_yticklabels([])
         ax.set_aspect("equal")
         plt.imshow(img.reshape([sqrtimg, sqrtimg]))
-    return
+    plt.show()
+
+# def show_images(images): 
+#     batch_size = images.shape[0]
+#     img_size = int(math.sqrt(images.shape[1]))  # 假设图片是正方形的
+#     if img_size * img_size != images.shape[1]:
+#         raise ValueError("Each image is not a square. Adjust image dimensions.")
+    
+#     sqrtn = int(math.ceil(math.sqrt(batch_size)))
+    
+#     fig = plt.figure(figsize=(sqrtn, sqrtn))
+#     gs = gridspec.GridSpec(sqrtn, sqrtn)
+#     gs.update(wspace=0.05, hspace=0.05)
+
+#     for i, img in enumerate(images):
+#         ax = plt.subplot(gs[i])
+#         plt.axis("off")
+#         ax.set_xticklabels([])
+#         ax.set_yticklabels([])
+#         ax.set_aspect("equal")
+        
+#         # 重塑每个图片为 28x28 的矩阵并显示
+#         plt.imshow(img.reshape(28, 28), cmap="gray")
+
+#     plt.show()  # 显示图片
 
 
 def count_params(model):

@@ -121,7 +121,7 @@ class CVAE(nn.Module):
         self.decoder = None
 
         ###########################################################################
-        # TODO: Define a FC encoder as described in the notebook that transforms  #
+        # Define a FC encoder as described in the notebook that transforms  #
         # the image--after flattening and now adding our one-hot class vector (N, #
         # H*W + C)--into a hidden_dimension (N, H_d) feature space, and a final   #
         # two layers that project that feature space to posterior mu and posterior#
@@ -129,14 +129,36 @@ class CVAE(nn.Module):
         ###########################################################################
         # Replace "pass" statement with your code
         # pass
-        
+        self.hidden_dim = 256
+        self.encoder = nn.Sequential(
+            nn.Linear(self.input_size + self.num_classes, self.hidden_dim),  # 改了这里
+            nn.ReLU(),
+            nn.Linear(self.hidden_dim, self.hidden_dim),
+            nn.ReLU(),
+            nn.Linear(self.hidden_dim, self.hidden_dim),
+            nn.ReLU(),
+        )
+        self.mu_layer = nn.Linear(self.hidden_dim, self.latent_size)
+        self.logvar_layer = nn.Linear(self.hidden_dim, self.latent_size)
         ###########################################################################
-        # TODO: Define a fully-connected decoder as described in the notebook that#
+        # Define a fully-connected decoder as described in the notebook that#
         # transforms the latent space (N, Z + C) to the estimated images of shape #
         # (N, 1, H, W).                                                           #
         ###########################################################################
         # Replace "pass" statement with your code
-        pass
+        # pass
+        hw = int((self.input_size ** 0.5) // 1)
+        self.decoder = nn.Sequential(
+            nn.Linear(self.latent_size + self.num_classes, self.hidden_dim),  # 改了这里
+            nn.ReLU(),
+            nn.Linear(self.hidden_dim, self.hidden_dim),
+            nn.ReLU(),
+            nn.Linear(self.hidden_dim, self.hidden_dim),
+            nn.ReLU(),
+            nn.Linear(self.hidden_dim, self.input_size),
+            nn.Sigmoid(),
+            nn.Unflatten(dim=1, unflattened_size=(1, hw, hw))
+        )
         ###########################################################################
         #                                      END OF YOUR CODE                   #
         ###########################################################################
@@ -161,7 +183,7 @@ class CVAE(nn.Module):
         mu = None
         logvar = None
         ###########################################################################
-        # TODO: Implement the forward pass by following these steps               #
+        # Implement the forward pass by following these steps               #
         # (1) Pass the concatenation of input batch and one hot vectors through   #
         #     the encoder model to get posterior mu and logvariance               #
         # (2) Reparametrize to compute the latent vector z                        #
@@ -169,7 +191,12 @@ class CVAE(nn.Module):
         #     resconstruct x                                                      #
         ###########################################################################
         # Replace "pass" statement with your code
-        pass
+        # pass
+        x = self.encoder(torch.concat((x.flatten(start_dim=1), c), dim=1))  # 改了这里
+        mu = self.mu_layer(x)
+        logvar = self.logvar_layer(x)
+        z = reparametrize(mu, logvar)
+        x_hat = self.decoder(torch.concat((z, c), dim=1))  # 改了这里
         ###########################################################################
         #                                      END OF YOUR CODE                   #
         ###########################################################################
@@ -201,12 +228,14 @@ def reparametrize(mu, logvar):
     """
     z = None
     ###############################################################################
-    # TODO: Reparametrize by initializing epsilon as a normal distribution and    #
+    # Reparametrize by initializing epsilon as a normal distribution and    #
     # scaling by posterior mu and sigma to estimate z                             #
     ###############################################################################
     # Replace "pass" statement with your code
     # pass
-    
+    ## 这里预测的是logvar，我们要sigma
+    eps = torch.randn_like(logvar) # 生成一个标准正态分布的随机数  也就是先验p(z)，我们用高斯分布假
+    z = torch.sqrt(torch.exp(logvar)) * eps + mu
     ###############################################################################
     #                              END OF YOUR CODE                               #
     ###############################################################################
@@ -232,11 +261,16 @@ def loss_function(x_hat, x, mu, logvar):
     """
     loss = None
     ###############################################################################
-    # TODO: Compute negative variational lowerbound loss as described in the      #
+    # Compute negative variational lowerbound loss as described in the      #
     # notebook                                                                    #
     ###############################################################################
     # Replace "pass" statement with your code
-    pass
+    # pass  最大化lower bound，但是是梯度下降算法，所以要取负号
+    # 以不直接的方式，提升生成原始图像的精确度
+    re_loss = F.binary_cross_entropy(x_hat, x, reduction="sum")  # 因为是自回归模型，所以重建的loss是要和自己比
+    kl_loss = 1/2 * torch.sum(mu**2 + torch.exp(logvar) - logvar -1)  # kl = 1/2 *[mu**2 + sigma**2 - logsigma**2 - 1]
+    loss = re_loss + kl_loss
+    loss /= x.shape[0]
     ###############################################################################
     #                            END OF YOUR CODE                                 #
     ###############################################################################
